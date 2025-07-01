@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight, CalendarIcon, Clock, FolderOpen } from "lucide-react"
 import { formatTime } from "@/lib/utils"
+import { getCalendar, CalendarEntry, CalendarProject } from "@/lib/calendar-utils"
+import { useRouter } from "next/navigation"
 
 interface TimeEntry {
   id: string
@@ -30,35 +32,37 @@ interface Project {
 }
 
 export default function CalendarPage() {
-  const [entries, setEntries] = useState<TimeEntry[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
+  const [entries, setEntries] = useState<CalendarEntry[]>([])
+  const [projects, setProjects] = useState<CalendarProject[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [clients, setClients] = useState<any[]>([])
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const router = useRouter()
 
   useEffect(() => {
-    const storedEntries = JSON.parse(localStorage.getItem("timeEntries") || "[]")
-    const storedProjects = JSON.parse(localStorage.getItem("projects") || "[]")
-    const storedClients = JSON.parse(localStorage.getItem("clients") || "[]")
+    async function fetchCalendar() {
+      const month = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`
+      try {
+        const data = await getCalendar(token, month)
+        setEntries(data.entries)
+        setProjects(data.projects)
+      } catch (err) {
+        // handle error (show toast, etc)
+      }
+    }
+    fetchCalendar()
+  }, [token, currentDate])
 
-    setEntries(
-      storedEntries.map((entry: any) => ({
-        ...entry,
-        startTime: new Date(entry.startTime),
-        endTime: entry.endTime ? new Date(entry.endTime) : undefined,
-      })),
-    )
-
-    setProjects(
-      storedProjects.map((project: any) => ({
-        ...project,
-        dueDate: project.dueDate ? new Date(project.dueDate) : undefined,
-        createdAt: new Date(project.createdAt),
-      })),
-    )
-
-    setClients(storedClients)
-  }, [])
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.replace("/login");
+      }
+    }
+  }, [router]);
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()

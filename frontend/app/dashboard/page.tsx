@@ -7,26 +7,11 @@ import { Clock, Play, Calendar, TrendingUp, Target } from "lucide-react"
 import { formatTime } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { getTimeEntries, TimeEntry as ApiTimeEntry } from "@/lib/time-entry-utils"
+import { getClients, Client as ApiClient } from "@/lib/client-utils"
 
-interface TimeEntry {
-  id: string
-  description: string
-  project?: string
-  client?: string
-  tags: string[]
-  startTime: Date
-  endTime?: Date
-  duration: number
-}
-
-interface Client {
-  id: string
-  name: string
-  email: string
-  company?: string
-  status: string
-  createdAt: Date
-}
+interface TimeEntry extends ApiTimeEntry {}
+interface Client extends ApiClient {}
 
 export default function DashboardPage() {
   const [currentEntry, setCurrentEntry] = useState<TimeEntry | null>(null)
@@ -35,166 +20,30 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
 
   useEffect(() => {
-    loadData()
-  }, [])
-
-  const loadData = async () => {
-    try {
+    async function fetchData() {
       setIsLoading(true)
-
-      // Load entries with error handling
-      const storedEntries = localStorage.getItem("timeEntries")
-      if (storedEntries) {
-        const parsedEntries = JSON.parse(storedEntries)
-        const validEntries = parsedEntries
-          .filter((entry: any) => entry && entry.id && entry.startTime)
-          .map((entry: any) => ({
-            ...entry,
-            startTime: new Date(entry.startTime),
-            endTime: entry.endTime ? new Date(entry.endTime) : undefined,
-            duration: Number(entry.duration) || 0,
-          }))
-        setEntries(validEntries)
+      try {
+        const [entriesData, clientsData] = await Promise.all([
+          getTimeEntries(token),
+          getClients(token),
+        ])
+        setEntries(entriesData)
+        setClients(clientsData)
+      } catch (error) {
+        toast({
+          title: "Error loading data",
+          description: "There was a problem loading your dashboard data.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
       }
-
-      // Load current entry
-      const currentEntryData = localStorage.getItem("currentEntry")
-      if (currentEntryData) {
-        const current = JSON.parse(currentEntryData)
-        if (current && current.startTime) {
-          setCurrentEntry({
-            ...current,
-            startTime: new Date(current.startTime),
-          })
-        }
-      }
-
-      // Load clients
-      const storedClients = localStorage.getItem("clients")
-      if (storedClients) {
-        const parsedClients = JSON.parse(storedClients)
-        const validClients = parsedClients.filter((client: any) => client && client.id)
-        setClients(validClients)
-      }
-    } catch (error) {
-      console.error("Error loading dashboard data:", error)
-      toast({
-        title: "Error loading data",
-        description: "There was a problem loading your dashboard data.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
     }
-  }
-
-  const generateSampleData = () => {
-    try {
-      const now = new Date()
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
-      const twoDaysAgo = new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000)
-
-      const sampleEntries = [
-        {
-          id: "sample1_" + Date.now(),
-          description: "Website homepage design",
-          project: "Website Redesign",
-          client: "Acme Corp",
-          tags: ["design", "frontend"],
-          startTime: new Date(twoDaysAgo.getTime() + 9 * 60 * 60 * 1000), // 9 AM two days ago
-          endTime: new Date(twoDaysAgo.getTime() + 12 * 60 * 60 * 1000), // 12 PM two days ago
-          duration: 10800, // 3 hours
-        },
-        {
-          id: "sample2_" + Date.now(),
-          description: "Client meeting and requirements",
-          project: "Website Redesign",
-          client: "Acme Corp",
-          tags: ["meeting"],
-          startTime: new Date(yesterday.getTime() + 14 * 60 * 60 * 1000), // 2 PM yesterday
-          endTime: new Date(yesterday.getTime() + 15.5 * 60 * 60 * 1000), // 3:30 PM yesterday
-          duration: 5400, // 1.5 hours
-        },
-        {
-          id: "sample3_" + Date.now(),
-          description: "Mobile app wireframes",
-          project: "Mobile App",
-          client: "TechStart Inc",
-          tags: ["development", "design"],
-          startTime: new Date(today.getTime() + 10 * 60 * 60 * 1000), // 10 AM today
-          endTime: new Date(today.getTime() + 12 * 60 * 60 * 1000), // 12 PM today
-          duration: 7200, // 2 hours
-        },
-      ]
-
-      const sampleClients = [
-        {
-          id: "client1_" + Date.now(),
-          name: "John Smith",
-          email: "john@acmecorp.com",
-          company: "Acme Corp",
-          status: "active",
-          createdAt: new Date(),
-        },
-        {
-          id: "client2_" + Date.now(),
-          name: "Sarah Johnson",
-          email: "sarah@techstart.com",
-          company: "TechStart Inc",
-          status: "active",
-          createdAt: new Date(),
-        },
-      ]
-
-      localStorage.setItem("timeEntries", JSON.stringify(sampleEntries))
-      localStorage.setItem("clients", JSON.stringify(sampleClients))
-
-      toast({
-        title: "Sample data added",
-        description: "Added 3 time entries and 2 clients for testing.",
-      })
-
-      // Reload data
-      loadData()
-    } catch (error) {
-      console.error("Error generating sample data:", error)
-      toast({
-        title: "Error",
-        description: "Failed to generate sample data.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const clearAllData = () => {
-    try {
-      localStorage.removeItem("timeEntries")
-      localStorage.removeItem("clients")
-      localStorage.removeItem("currentEntry")
-      localStorage.removeItem("projects")
-      localStorage.removeItem("tags")
-
-      toast({
-        title: "Data cleared",
-        description: "All data has been cleared successfully.",
-      })
-
-      // Reset state
-      setEntries([])
-      setClients([])
-      setCurrentEntry(null)
-    } catch (error) {
-      console.error("Error clearing data:", error)
-      toast({
-        title: "Error",
-        description: "Failed to clear data.",
-        variant: "destructive",
-      })
-    }
-  }
+    fetchData()
+  }, [token])
 
   // Safe calculations with error handling
   const todayTotal = entries
@@ -240,7 +89,7 @@ export default function DashboardPage() {
 
   const getClientDisplayName = (clientId: string) => {
     try {
-      const client = clients.find((c) => c.company === clientId || c.name === clientId)
+      const client = clients.find((c) => c.company === clientId || c.name === clientId || c.id === clientId)
       return client ? client.company || client.name : clientId
     } catch {
       return clientId
@@ -279,10 +128,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex gap-2">
-          <Button onClick={generateSampleData} variant="outline" size="sm">
+          <Button variant="outline" size="sm">
             Add Sample Data
           </Button>
-          <Button onClick={clearAllData} variant="outline" size="sm">
+          <Button variant="outline" size="sm">
             Clear All Data
           </Button>
         </div>

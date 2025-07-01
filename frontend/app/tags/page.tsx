@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,60 +19,14 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, Tag, MoreHorizontal, Edit, Trash2, Hash } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { getTags, createTag, updateTag, deleteTag, Tag as ApiTag } from "@/lib/tag-utils"
+import { useRouter } from "next/navigation"
 
-interface TagItem {
-  id: string
-  name: string
-  color: string
-  description?: string
-  usageCount: number
-  createdAt: Date
-}
+interface TagItem extends ApiTag {}
 
 export default function TagsPage() {
-  const [tags, setTags] = useState<TagItem[]>([
-    {
-      id: "1",
-      name: "Development",
-      color: "#3b82f6",
-      description: "Software development tasks",
-      usageCount: 45,
-      createdAt: new Date("2024-01-15"),
-    },
-    {
-      id: "2",
-      name: "Design",
-      color: "#10b981",
-      description: "UI/UX design work",
-      usageCount: 32,
-      createdAt: new Date("2024-01-20"),
-    },
-    {
-      id: "3",
-      name: "Meeting",
-      color: "#10b981",
-      description: "Client and team meetings",
-      usageCount: 28,
-      createdAt: new Date("2024-01-25"),
-    },
-    {
-      id: "4",
-      name: "Research",
-      color: "#8b5cf6",
-      description: "Research and planning",
-      usageCount: 15,
-      createdAt: new Date("2024-02-01"),
-    },
-    {
-      id: "5",
-      name: "Testing",
-      color: "#ef4444",
-      description: "Quality assurance and testing",
-      usageCount: 12,
-      createdAt: new Date("2024-02-05"),
-    },
-  ])
-
+  const [tags, setTags] = useState<TagItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTag, setEditingTag] = useState<TagItem | null>(null)
   const [formData, setFormData] = useState({
@@ -80,35 +34,47 @@ export default function TagsPage() {
     color: "#3b82f6",
     description: "",
   })
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const router = useRouter()
 
-  const colors = [
-    "#3b82f6",
-    "#10b981",
-    "#ef4444",
-    "#8b5cf6",
-    "#06b6d4",
-    "#84cc16",
-    "#f97316",
-    "#ec4899",
-    "#6366f1",
-  ]
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (editingTag) {
-      setTags(tags.map((t) => (t.id === editingTag.id ? { ...editingTag, ...formData } : t)))
-    } else {
-      const newTag: TagItem = {
-        id: Date.now().toString(),
-        ...formData,
-        usageCount: 0,
-        createdAt: new Date(),
+  useEffect(() => {
+    async function fetchTags() {
+      setIsLoading(true)
+      try {
+        const data = await getTags(token)
+        setTags(data)
+      } catch (err) {
+        // handle error (show toast, etc)
+      } finally {
+        setIsLoading(false)
       }
-      setTags([...tags, newTag])
     }
+    fetchTags()
+  }, [token])
 
-    resetForm()
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        router.replace("/login")
+      }
+    }
+  }, [router])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      if (editingTag) {
+        const updated = await updateTag(editingTag.id, formData, token)
+        setTags((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+      } else {
+        const created = await createTag(formData, token)
+        setTags((prev) => [...prev, created])
+      }
+      resetForm()
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
   const resetForm = () => {
@@ -131,12 +97,29 @@ export default function TagsPage() {
     setIsDialogOpen(true)
   }
 
-  const deleteTag = (id: string) => {
-    setTags(tags.filter((t) => t.id !== id))
+  const handleDeleteTag = async (id: string) => {
+    try {
+      await deleteTag(id, token)
+      setTags((prev) => prev.filter((t) => t.id !== id))
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
-  const sortedTags = [...tags].sort((a, b) => b.usageCount - a.usageCount)
-  const totalUsage = tags.reduce((sum, tag) => sum + tag.usageCount, 0)
+  const sortedTags = [...tags].sort((a, b) => b.usage_count - a.usage_count)
+  const totalUsage = tags.reduce((sum, tag) => sum + tag.usage_count, 0)
+
+  const colors = [
+    "#3b82f6",
+    "#10b981",
+    "#ef4444",
+    "#8b5cf6",
+    "#06b6d4",
+    "#84cc16",
+    "#f97316",
+    "#ec4899",
+    "#6366f1",
+  ]
 
   return (
     <div className="space-y-6">
@@ -240,7 +223,7 @@ export default function TagsPage() {
           <CardContent>
             <div className="text-2xl font-bold">{sortedTags.length > 0 ? sortedTags[0].name : "None"}</div>
             <p className="text-xs text-muted-foreground">
-              {sortedTags.length > 0 ? `${sortedTags[0].usageCount} uses` : "No usage yet"}
+              {sortedTags.length > 0 ? `${sortedTags[0].usage_count} uses` : "No usage yet"}
             </p>
           </CardContent>
         </Card>
@@ -263,13 +246,13 @@ export default function TagsPage() {
                       <div className="font-semibold">{tag.name}</div>
                       {tag.description && <div className="text-sm text-muted-foreground">{tag.description}</div>}
                       <div className="text-xs text-muted-foreground mt-1">
-                        Created {tag.createdAt.toLocaleDateString()}
+                        Created {new Date(tag.created_at).toLocaleDateString()}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <Badge variant="secondary">{tag.usageCount} uses</Badge>
+                    <Badge variant="secondary">{tag.usage_count} uses</Badge>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm">
@@ -281,7 +264,7 @@ export default function TagsPage() {
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteTag(tag.id)} className="text-destructive">
+                        <DropdownMenuItem onClick={() => handleDeleteTag(tag.id)} className="text-destructive">
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
                         </DropdownMenuItem>
@@ -309,7 +292,7 @@ export default function TagsPage() {
               {sortedTags.map((tag) => {
                 const size = Math.max(
                   12,
-                  Math.min(24, 12 + (tag.usageCount / Math.max(...tags.map((t) => t.usageCount))) * 12),
+                  Math.min(24, 12 + (tag.usage_count / Math.max(...tags.map((t) => t.usage_count))) * 12),
                 )
                 return (
                   <Badge
@@ -322,7 +305,7 @@ export default function TagsPage() {
                       color: tag.color,
                     }}
                   >
-                    {tag.name} ({tag.usageCount})
+                    {tag.name} ({tag.usage_count})
                   </Badge>
                 )
               })}

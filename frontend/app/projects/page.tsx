@@ -20,51 +20,14 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, FolderOpen, MoreHorizontal, Edit, Trash2, Users, Calendar } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { getProjects, createProject, updateProject, deleteProject, Project as ApiProject } from "@/lib/project-utils"
+import { useRouter } from "next/navigation"
 
-interface Project {
-  id: string
-  name: string
-  client: string
-  color: string
-  status: "active" | "completed" | "on-hold"
-  description?: string
-  dueDate?: Date
-  createdAt: Date
-}
+interface Project extends ApiProject {}
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([
-    {
-      id: "1",
-      name: "Website Redesign",
-      client: "Acme Corp",
-      color: "#3b82f6",
-      status: "active",
-      description: "Complete redesign of company website",
-      dueDate: new Date("2024-12-31"),
-      createdAt: new Date("2024-01-15"),
-    },
-    {
-      id: "2",
-      name: "Mobile App Development",
-      client: "TechStart Inc",
-      color: "#10b981",
-      status: "active",
-      description: "iOS and Android app development",
-      dueDate: new Date("2024-07-15"),
-      createdAt: new Date("2024-02-01"),
-    },
-    {
-      id: "3",
-      name: "Marketing Campaign",
-      client: "Design Studio",
-      color: "#10b981",
-      status: "completed",
-      description: "Q1 marketing campaign design and execution",
-      createdAt: new Date("2024-01-01"),
-    },
-  ])
-
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [formData, setFormData] = useState({
@@ -73,55 +36,52 @@ export default function ProjectsPage() {
     color: "#3b82f6",
     status: "active" as const,
     description: "",
-    dueDate: "",
+    due_date: "",
   })
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const router = useRouter()
 
   const clients = ["Acme Corp", "TechStart Inc", "Design Studio", "Local Business"]
   const colors = ["#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4"]
 
   useEffect(() => {
-    const storedProjects = JSON.parse(localStorage.getItem("projects") || "[]")
-    if (storedProjects.length > 0) {
-      setProjects(
-        storedProjects.map((project: any) => ({
-          ...project,
-          dueDate: project.dueDate ? new Date(project.dueDate) : undefined,
-          createdAt: new Date(project.createdAt),
-        })),
-      )
+    async function fetchProjects() {
+      setIsLoading(true)
+      try {
+        const data = await getProjects(token)
+        setProjects(data)
+      } catch (err) {
+        // handle error (show toast, etc)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [])
+    fetchProjects()
+  }, [token])
 
   useEffect(() => {
-    localStorage.setItem("projects", JSON.stringify(projects))
-  }, [projects])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (editingProject) {
-      setProjects(
-        projects.map((p) =>
-          p.id === editingProject.id
-            ? {
-                ...editingProject,
-                ...formData,
-                dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-              }
-            : p,
-        ),
-      )
-    } else {
-      const newProject: Project = {
-        id: Date.now().toString(),
-        ...formData,
-        dueDate: formData.dueDate ? new Date(formData.dueDate) : undefined,
-        createdAt: new Date(),
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        router.replace("/login")
       }
-      setProjects([...projects, newProject])
     }
+  }, [router])
 
-    resetForm()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      if (editingProject) {
+        const updated = await updateProject(editingProject.id, formData, token)
+        setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+      } else {
+        const created = await createProject(formData, token)
+        setProjects((prev) => [...prev, created])
+      }
+      resetForm()
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
   const resetForm = () => {
@@ -131,7 +91,7 @@ export default function ProjectsPage() {
       color: "#3b82f6",
       status: "active",
       description: "",
-      dueDate: "",
+      due_date: "",
     })
     setEditingProject(null)
     setIsDialogOpen(false)
@@ -141,18 +101,23 @@ export default function ProjectsPage() {
     setEditingProject(project)
     setFormData({
       name: project.name,
-      client: project.client,
+      client: project.client || "",
       color: project.color,
       status: project.status,
       description: project.description || "",
-      dueDate: project.dueDate ? project.dueDate.toISOString().split("T")[0] : "",
+      due_date: project.due_date ? project.due_date.split("T")[0] : "",
     })
     setIsDialogOpen(true)
   }
 
-  const deleteProject = (id: string) => {
+  const handleDeleteProject = async (id: string) => {
     if (confirm("Are you sure you want to delete this project?")) {
-      setProjects(projects.filter((p) => p.id !== id))
+      try {
+        await deleteProject(id, token)
+        setProjects((prev) => prev.filter((p) => p.id !== id))
+      } catch (err) {
+        // handle error (show toast, etc)
+      }
     }
   }
 
@@ -255,8 +220,8 @@ export default function ProjectsPage() {
                   <Input
                     id="dueDate"
                     type="date"
-                    value={formData.dueDate}
-                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                    value={formData.due_date}
+                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
                   />
                 </div>
               </div>
@@ -315,7 +280,7 @@ export default function ProjectsPage() {
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => deleteProject(project.id)} className="text-destructive">
+                    <DropdownMenuItem onClick={() => handleDeleteProject(project.id)} className="text-destructive">
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
                     </DropdownMenuItem>
@@ -331,19 +296,19 @@ export default function ProjectsPage() {
                 <Badge className={getStatusColor(project.status)}>
                   {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                 </Badge>
-                {project.dueDate && (
+                {project.due_date && (
                   <div className="flex items-center gap-1 text-sm">
                     <Calendar className="h-3 w-3 text-slate-500" />
-                    <span className={isOverdue(project.dueDate) ? "text-red-600 font-medium" : isDueToday(project.dueDate) ? "text-orange-600 font-medium" : "text-slate-500"}>
-                      {project.dueDate.toLocaleDateString()}
+                    <span className={isOverdue(new Date(project.due_date)) ? "text-red-600 font-medium" : isDueToday(new Date(project.due_date)) ? "text-orange-600 font-medium" : "text-slate-500"}>
+                      {new Date(project.due_date).toLocaleDateString()}
                     </span>
                   </div>
                 )}
               </div>
-              {isOverdue(project.dueDate) && (
+              {isOverdue(new Date(project.due_date)) && (
                 <p className="text-xs text-red-600 font-medium">Overdue</p>
               )}
-              {isDueToday(project.dueDate) && (
+              {isDueToday(new Date(project.due_date)) && (
                 <p className="text-xs text-orange-600 font-medium">Due today</p>
               )}
             </CardContent>

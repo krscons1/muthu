@@ -9,6 +9,9 @@ from .serializers import (
 from django.contrib.auth.models import User
 from django.db.models import Sum, Count
 from datetime import datetime
+from rest_framework_simplejwt.tokens import RefreshToken
+import firebase_admin
+from firebase_admin import auth as firebase_auth
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -116,3 +119,30 @@ class CalendarView(APIView):
             'entries': TimeEntrySerializer(entries, many=True).data,
             'projects': ProjectSerializer(projects, many=True).data,
         })
+
+class FirebaseLoginView(APIView):
+    permission_classes = []  # Allow any
+
+    def post(self, request):
+        id_token = request.data.get('id_token')
+        if not id_token:
+            return Response({'detail': 'No ID token provided.'}, status=400)
+        try:
+            decoded_token = firebase_auth.verify_id_token(id_token)
+            uid = decoded_token['uid']
+            email = decoded_token.get('email')
+            # Get or create user in Django
+            from django.contrib.auth.models import User
+            user, created = User.objects.get_or_create(username=uid, defaults={'email': email or ''})
+            # Optionally update email if changed
+            if email and user.email != email:
+                user.email = email
+                user.save()
+            # Create JWT token for Django
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'token': str(refresh.access_token),
+                'refresh': str(refresh),
+            })
+        except Exception as e:
+            return Response({'detail': str(e)}, status=400)

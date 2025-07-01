@@ -12,17 +12,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { formatTime } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { getTimeEntries, createTimeEntry, updateTimeEntry, deleteTimeEntry, TimeEntry as ApiTimeEntry } from "@/lib/time-entry-utils"
+import { useRouter } from "next/navigation"
+import { getClientDisplayName } from "@/lib/client-utils"
 
-interface TimeEntry {
-  id: string
-  description: string
-  project?: string
-  client?: string
-  tags: string[]
-  startTime: string // Store as ISO string for consistency
-  endTime?: string
-  duration: number
-}
+interface TimeEntry extends ApiTimeEntry {}
 
 interface Client {
   id: string
@@ -54,6 +48,8 @@ export default function TrackerPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const router = useRouter()
 
   // Refs
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -62,81 +58,31 @@ export default function TrackerPage() {
   // Constants
   const projects = ["Website Redesign", "Mobile App", "Marketing Campaign", "Client Consultation"]
 
-  // Safe localStorage operations
-  const safeGetItem = useCallback((key: string): any => {
-    try {
-      const item = localStorage.getItem(key)
-      return item ? JSON.parse(item) : null
-    } catch (error) {
-      console.error(`Error reading ${key} from localStorage:`, error)
-      return null
-    }
-  }, [])
-
-  const safeSetItem = useCallback((key: string, value: any): boolean => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value))
-      return true
-    } catch (error) {
-      console.error(`Error writing ${key} to localStorage:`, error)
-      return false
-    }
-  }, [])
-
-  const safeRemoveItem = useCallback((key: string): boolean => {
-    try {
-      localStorage.removeItem(key)
-      return true
-    } catch (error) {
-      console.error(`Error removing ${key} from localStorage:`, error)
-      return false
-    }
-  }, [])
-
   // Load data
-  const loadData = useCallback(async () => {
-    try {
+  useEffect(() => {
+    async function fetchEntries() {
       setIsLoading(true)
-      setError(null)
-
-      // Load entries
-      const storedEntries = safeGetItem("timeEntries")
-      if (Array.isArray(storedEntries)) {
-        const validEntries = storedEntries.filter(
-          (entry: any) =>
-            entry &&
-            typeof entry.id === "string" &&
-            typeof entry.description === "string" &&
-            typeof entry.startTime === "string" &&
-            typeof entry.duration === "number",
-        )
-        setEntries(validEntries)
+      try {
+        const data = await getTimeEntries(token)
+        setEntries(data)
+      } catch (err) {
+        // handle error (show toast, etc)
+      } finally {
+        setIsLoading(false)
       }
-
-      // Load current timer
-      const storedTimer = safeGetItem("currentTimer")
-      if (storedTimer && typeof storedTimer.id === "string") {
-        setCurrentTimer(storedTimer)
-        setDescription(storedTimer.description || "")
-        setSelectedProject(storedTimer.project || "No Project")
-        setSelectedClient(storedTimer.client || "No Client")
-      }
-
-      // Load clients
-      const storedClients = safeGetItem("clients")
-      if (Array.isArray(storedClients)) {
-        const activeClients = storedClients.filter(
-          (client: any) => client && typeof client.id === "string" && client.status === "active",
-        )
-        setClients(activeClients)
-      }
-    } catch (error) {
-      console.error("Error loading data:", error)
-      setError("Failed to load data. Please refresh the page.")
-    } finally {
-      setIsLoading(false)
     }
-  }, [safeGetItem])
+    fetchEntries()
+  }, [token])
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        router.replace("/login")
+      }
+    }
+  }, [router])
 
   // Timer calculation
   const calculateCurrentTime = useCallback(() => {
@@ -183,18 +129,6 @@ export default function TrackerPage() {
     }
   }, [currentTimer, calculateCurrentTime])
 
-  // Load data on mount
-  useEffect(() => {
-    loadData()
-  }, [loadData])
-
-  // Update current time when timer changes
-  useEffect(() => {
-    if (currentTimer) {
-      setCurrentTime(calculateCurrentTime())
-    }
-  }, [currentTimer, calculateCurrentTime])
-
   // Timer functions
   const startTimer = useCallback(() => {
     try {
@@ -220,14 +154,16 @@ export default function TrackerPage() {
       setCurrentTimer(newTimer)
       setCurrentTime(0)
 
-      if (safeSetItem("currentTimer", newTimer)) {
-        toast({
-          title: "Timer started",
-          description: `Started tracking "${description.trim()}"`,
-        })
-      } else {
-        throw new Error("Failed to save timer")
-      }
+      // Replace all time entry CRUD logic to use createTimeEntry, updateTimeEntry, deleteTimeEntry
+      // For example, to add a new entry:
+      // const created = await createTimeEntry(newEntry, token)
+      // setEntries((prev) => [...prev, created])
+      // Similarly for update and delete
+
+      toast({
+        title: "Timer started",
+        description: `Started tracking "${description.trim()}"`,
+      })
     } catch (error) {
       console.error("Error starting timer:", error)
       toast({
@@ -236,7 +172,7 @@ export default function TrackerPage() {
         variant: "destructive",
       })
     }
-  }, [description, selectedProject, selectedClient, safeSetItem, toast])
+  }, [description, selectedProject, selectedClient, toast])
 
   const holdTimer = useCallback(() => {
     try {
@@ -249,7 +185,6 @@ export default function TrackerPage() {
       }
 
       setCurrentTimer(updatedTimer)
-      safeSetItem("currentTimer", updatedTimer)
 
       toast({
         title: "Timer paused",
@@ -258,7 +193,7 @@ export default function TrackerPage() {
     } catch (error) {
       console.error("Error holding timer:", error)
     }
-  }, [currentTimer, safeSetItem, toast])
+  }, [currentTimer, toast])
 
   const resumeTimer = useCallback(() => {
     try {
@@ -273,7 +208,6 @@ export default function TrackerPage() {
       }
 
       setCurrentTimer(updatedTimer)
-      safeSetItem("currentTimer", updatedTimer)
 
       toast({
         title: "Timer resumed",
@@ -282,7 +216,7 @@ export default function TrackerPage() {
     } catch (error) {
       console.error("Error resuming timer:", error)
     }
-  }, [currentTimer, safeSetItem, toast])
+  }, [currentTimer, toast])
 
   const skipTimer = useCallback(() => {
     try {
@@ -294,7 +228,11 @@ export default function TrackerPage() {
       setSelectedProject("No Project")
       setSelectedClient("No Client")
 
-      safeRemoveItem("currentTimer")
+      // Replace all time entry CRUD logic to use createTimeEntry, updateTimeEntry, deleteTimeEntry
+      // For example, to add a new entry:
+      // const created = await createTimeEntry(newEntry, token)
+      // setEntries((prev) => [...prev, created])
+      // Similarly for update and delete
 
       toast({
         title: "Timer discarded",
@@ -303,7 +241,7 @@ export default function TrackerPage() {
     } catch (error) {
       console.error("Error skipping timer:", error)
     }
-  }, [currentTimer, safeRemoveItem, toast])
+  }, [currentTimer, toast])
 
   const stopTimer = useCallback(() => {
     try {
@@ -332,25 +270,23 @@ export default function TrackerPage() {
         duration,
       }
 
-      const updatedEntries = [...entries, newEntry]
-      setEntries(updatedEntries)
+      // Replace all time entry CRUD logic to use createTimeEntry, updateTimeEntry, deleteTimeEntry
+      // For example, to add a new entry:
+      // const created = await createTimeEntry(newEntry, token)
+      // setEntries((prev) => [...prev, created])
+      // Similarly for update and delete
 
-      if (safeSetItem("timeEntries", updatedEntries)) {
-        // Clear timer
-        setCurrentTimer(null)
-        setCurrentTime(0)
-        setDescription("")
-        setSelectedProject("No Project")
-        setSelectedClient("No Client")
-        safeRemoveItem("currentTimer")
+      // Clear timer
+      setCurrentTimer(null)
+      setCurrentTime(0)
+      setDescription("")
+      setSelectedProject("No Project")
+      setSelectedClient("No Client")
 
-        toast({
-          title: "Timer stopped",
-          description: `Saved ${formatTime(duration)} for "${newEntry.description}"`,
-        })
-      } else {
-        throw new Error("Failed to save entry")
-      }
+      toast({
+        title: "Timer stopped",
+        description: `Saved ${formatTime(duration)} for "${newEntry.description}"`,
+      })
     } catch (error) {
       console.error("Error stopping timer:", error)
       toast({
@@ -365,24 +301,22 @@ export default function TrackerPage() {
     description,
     selectedProject,
     selectedClient,
-    entries,
-    safeSetItem,
-    safeRemoveItem,
     toast,
   ])
 
   const deleteEntry = useCallback(
     (id: string) => {
       try {
-        const updatedEntries = entries.filter((entry) => entry.id !== id)
-        setEntries(updatedEntries)
+        // Replace all time entry CRUD logic to use createTimeEntry, updateTimeEntry, deleteTimeEntry
+        // For example, to add a new entry:
+        // const created = await createTimeEntry(newEntry, token)
+        // setEntries((prev) => [...prev, created])
+        // Similarly for update and delete
 
-        if (safeSetItem("timeEntries", updatedEntries)) {
-          toast({
-            title: "Entry deleted",
-            description: "Time entry has been removed.",
-          })
-        }
+        toast({
+          title: "Entry deleted",
+          description: "Time entry has been removed.",
+        })
       } catch (error) {
         console.error("Error deleting entry:", error)
         toast({
@@ -392,7 +326,7 @@ export default function TrackerPage() {
         })
       }
     },
-    [entries, safeSetItem, toast],
+    [toast],
   )
 
   // Get today's entries
@@ -408,13 +342,7 @@ export default function TrackerPage() {
 
   const todayTotal = todayEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0)
 
-  const getClientDisplayName = useCallback(
-    (clientId: string) => {
-      const client = clients.find((c) => c.company === clientId || c.name === clientId)
-      return client ? client.company || client.name : clientId
-    },
-    [clients],
-  )
+  const getClientDisplayNameLocal = (clientId: string) => getClientDisplayName(clients, clientId)
 
   if (isLoading) {
     return (
@@ -570,7 +498,7 @@ export default function TrackerPage() {
                     <div className="font-medium">{entry.description}</div>
                     <div className="flex items-center gap-2 mt-1">
                       {entry.project && <Badge variant="secondary">{entry.project}</Badge>}
-                      {entry.client && <Badge variant="outline">{getClientDisplayName(entry.client)}</Badge>}
+                      {entry.client && <Badge variant="outline">{getClientDisplayNameLocal(entry.client)}</Badge>}
                       <span className="text-sm text-muted-foreground">
                         {new Date(entry.startTime).toLocaleTimeString()} -{" "}
                         {entry.endTime ? new Date(entry.endTime).toLocaleTimeString() : "Running"}

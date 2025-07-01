@@ -20,65 +20,14 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Plus, Users, MoreHorizontal, Edit, Trash2, Mail, Phone, Building } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { getClients, createClient, updateClient, deleteClient, Client as ApiClient } from "@/lib/client-utils"
+import { useRouter } from "next/navigation"
 
-interface Client {
-  id: string
-  name: string
-  email: string
-  phone?: string
-  company?: string
-  address?: string
-  notes?: string
-  status: "active" | "inactive"
-  createdAt: Date
-}
+interface Client extends ApiClient {}
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: "1",
-      name: "John Smith",
-      email: "john@acmecorp.com",
-      phone: "+1 (555) 123-4567",
-      company: "Acme Corp",
-      status: "active",
-      createdAt: new Date("2024-01-15"),
-    },
-    {
-      id: "2",
-      name: "Sarah Johnson",
-      email: "sarah@techstart.com",
-      phone: "+1 (555) 987-6543",
-      company: "TechStart Inc",
-      status: "active",
-      createdAt: new Date("2024-02-01"),
-    },
-    {
-      id: "3",
-      name: "Mike Wilson",
-      email: "mike@designstudio.com",
-      company: "Design Studio",
-      status: "inactive",
-      createdAt: new Date("2024-01-01"),
-    },
-  ])
-
-  useEffect(() => {
-    const storedClients = JSON.parse(localStorage.getItem("clients") || "[]")
-    if (storedClients.length > 0) {
-      setClients(
-        storedClients.map((client: any) => ({
-          ...client,
-          createdAt: new Date(client.createdAt),
-        })),
-      )
-    }
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem("clients", JSON.stringify(clients))
-  }, [clients])
-
+  const [clients, setClients] = useState<Client[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [formData, setFormData] = useState({
@@ -90,22 +39,48 @@ export default function ClientsPage() {
     notes: "",
     status: "active" as const,
   })
+  const router = useRouter();
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (editingClient) {
-      setClients(clients.map((c) => (c.id === editingClient.id ? { ...editingClient, ...formData } : c)))
-    } else {
-      const newClient: Client = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: new Date(),
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.replace("/login");
       }
-      setClients([...clients, newClient])
     }
+  }, [router]);
 
-    resetForm()
+  useEffect(() => {
+    async function fetchClients() {
+      setIsLoading(true)
+      try {
+        const data = await getClients(token)
+        setClients(data)
+      } catch (err) {
+        // handle error (show toast, etc)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchClients()
+  }, [token])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      if (editingClient) {
+        const updated = await updateClient(editingClient.id, formData, token)
+        setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+      } else {
+        const created = await createClient(formData, token)
+        setClients((prev) => [...prev, created])
+      }
+      resetForm()
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
   const resetForm = () => {
@@ -136,8 +111,13 @@ export default function ClientsPage() {
     setIsDialogOpen(true)
   }
 
-  const deleteClient = (id: string) => {
-    setClients(clients.filter((c) => c.id !== id))
+  const handleDeleteClient = async (id: string) => {
+    try {
+      await deleteClient(id, token)
+      setClients((prev) => prev.filter((c) => c.id !== id))
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
   const activeClients = clients.filter((c) => c.status === "active")
@@ -286,7 +266,7 @@ export default function ClientsPage() {
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => deleteClient(client.id)} className="text-destructive">
+                      <DropdownMenuItem onClick={() => handleDeleteClient(client.id)} className="text-destructive">
                         <Trash2 className="h-4 w-4 mr-2" />
                         Delete
                       </DropdownMenuItem>
@@ -317,7 +297,7 @@ export default function ClientsPage() {
                 <div className="flex items-center justify-between pt-2">
                   <Badge className="bg-green-100 text-green-800">Active</Badge>
                   <span className="text-xs text-slate-500">
-                    Added {client.createdAt.toLocaleDateString()}
+                    Added {client.created_at.toLocaleDateString()}
                   </span>
                 </div>
               </CardContent>
@@ -355,7 +335,7 @@ export default function ClientsPage() {
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteClient(client.id)} className="text-destructive">
+                        <DropdownMenuItem onClick={() => handleDeleteClient(client.id)} className="text-destructive">
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
                         </DropdownMenuItem>
@@ -377,7 +357,7 @@ export default function ClientsPage() {
                   <div className="flex items-center justify-between pt-2">
                     <Badge variant="secondary" className="bg-slate-100 text-slate-700">Inactive</Badge>
                     <span className="text-xs text-slate-500">
-                      Added {client.createdAt.toLocaleDateString()}
+                      Added {client.created_at.toLocaleDateString()}
                     </span>
                   </div>
                 </CardContent>

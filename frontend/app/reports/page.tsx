@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, Download, Filter, TrendingUp, Clock, DollarSign, Plus } from "lucide-react"
 import { formatTime } from "@/lib/utils"
-import { getClientOptions, getClientDisplayName } from "@/lib/client-utils"
+import { getClients, getClientOptions, getClientDisplayName, Client } from "@/lib/client-utils"
 import type { DateRange } from "react-day-picker"
 import { toast } from "@/components/ui/use-toast"
+import { useRouter } from "next/navigation"
 
 interface TimeEntry {
   id: string
@@ -26,6 +27,7 @@ interface TimeEntry {
 
 export default function ReportsPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: new Date(2025, 5, 20), // June 20, 2025
     to: new Date(2025, 5, 28), // June 28, 2025
@@ -33,6 +35,22 @@ export default function ReportsPage() {
   const [selectedProject, setSelectedProject] = useState<string>("all")
   const [selectedClient, setSelectedClient] = useState<string>("all")
   const [clientOptions, setClientOptions] = useState<string[]>([])
+  const router = useRouter();
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+
+  useEffect(() => {
+    async function fetchClients() {
+      try {
+        const data = await getClients(token)
+        setClients(data)
+        setClientOptions(getClientOptions(data))
+      } catch (err) {
+        setClients([])
+        setClientOptions([])
+      }
+    }
+    fetchClients()
+  }, [token])
 
   useEffect(() => {
     const storedEntries = JSON.parse(localStorage.getItem("timeEntries") || "[]")
@@ -144,16 +162,23 @@ export default function ReportsPage() {
         })),
       )
     }
-
-    // Load client options
-    setClientOptions(getClientOptions())
   }, [])
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.replace("/login");
+      }
+    }
+  }, [router]);
 
   const filteredEntries = entries.filter((entry) => {
     const entryDate = new Date(entry.startTime)
     const inDateRange = !dateRange?.from || !dateRange?.to || (entryDate >= dateRange.from && entryDate <= dateRange.to)
     const matchesProject = selectedProject === "all" || entry.project === selectedProject
-    const matchesClient = selectedClient === "all" || getClientDisplayName(entry.client || "") === selectedClient
+    const matchesClient = selectedClient === "all" || getClientDisplayName(clients, entry.client || "") === selectedClient
 
     return inDateRange && matchesProject && matchesClient
   })
@@ -174,7 +199,7 @@ export default function ReportsPage() {
   // Client breakdown - use display names
   const clientStats = filteredEntries.reduce(
     (acc, entry) => {
-      const client = entry.client ? getClientDisplayName(entry.client) : "No Client"
+      const client = entry.client ? getClientDisplayName(clients, entry.client) : "No Client"
       acc[client] = (acc[client] || 0) + entry.duration
       return acc
     },
@@ -200,7 +225,7 @@ export default function ReportsPage() {
         new Date(entry.startTime).toLocaleDateString(),
         entry.description,
         entry.project || "",
-        entry.client ? getClientDisplayName(entry.client) : "",
+        entry.client ? getClientDisplayName(clients, entry.client) : "",
         formatTime(entry.duration),
         new Date(entry.startTime).toLocaleTimeString(),
         entry.endTime ? new Date(entry.endTime).toLocaleTimeString() : "",
@@ -509,7 +534,7 @@ export default function ReportsPage() {
                     <div className="font-medium">{entry.description}</div>
                     <div className="flex items-center gap-2 mt-1">
                       {entry.project && <Badge variant="secondary">{entry.project}</Badge>}
-                      {entry.client && <Badge variant="outline">{getClientDisplayName(entry.client)}</Badge>}
+                      {entry.client && <Badge variant="outline">{getClientDisplayName(clients, entry.client)}</Badge>}
                       <span className="text-sm text-muted-foreground">
                         {new Date(entry.startTime).toLocaleDateString()} •{" "}
                         {new Date(entry.startTime).toLocaleTimeString()}

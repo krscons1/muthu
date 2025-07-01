@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,39 +11,51 @@ import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Settings, User, Clock, Bell, Download, Upload, Trash2, Shield } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getSettings, updateSettings, Settings as ApiSettings } from "@/lib/settings-utils"
+import { useRouter } from "next/navigation"
 
 export default function SettingsPage() {
   const { toast } = useToast()
-  const [settings, setSettings] = useState({
-    // Profile
-    name: "John Doe",
-    email: "john@example.com",
-    timezone: "America/New_York",
+  const [settings, setSettings] = useState<Partial<ApiSettings>>({})
+  const [isLoading, setIsLoading] = useState(true)
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const router = useRouter()
 
-    // Time Tracking
-    defaultProject: "",
-    autoStart: false,
-    reminderInterval: 30,
-    weeklyGoal: 40,
+  useEffect(() => {
+    async function fetchSettings() {
+      setIsLoading(true)
+      try {
+        const data = await getSettings(token)
+        setSettings(data)
+      } catch (err) {
+        // handle error (show toast, etc)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchSettings()
+  }, [token])
 
-    // Notifications
-    emailNotifications: true,
-    reminderNotifications: true,
-    weeklyReports: true,
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("token")
+      if (!token) {
+        router.replace("/login")
+      }
+    }
+  }, [router])
 
-    // Display
-    timeFormat: "24h",
-    dateFormat: "MM/DD/YYYY",
-    theme: "system",
-  })
-
-  const handleSave = () => {
-    // Save settings to localStorage
-    localStorage.setItem("appSettings", JSON.stringify(settings))
-    toast({
-      title: "Settings saved",
-      description: "Your preferences have been updated successfully.",
-    })
+  const handleSave = async () => {
+    try {
+      const updated = await updateSettings(settings, token)
+      setSettings(updated)
+      toast({
+        title: "Settings saved",
+        description: "Your preferences have been updated successfully.",
+      })
+    } catch (err) {
+      // handle error (show toast, etc)
+    }
   }
 
   const exportData = () => {
