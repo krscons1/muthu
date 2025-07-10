@@ -1,4 +1,4 @@
-import axios from "axios"
+import api from "./api"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -18,16 +18,12 @@ export interface Settings {
   theme: string
 }
 
-export async function getSettings(token: string): Promise<Settings> {
-  const res = await axios.get(`${API_BASE_URL}/settings/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  return res.data
+export async function getSettings(): Promise<Settings> {
+  const res = await api.get(`/settings/`);
+  return res.data;
 }
 
-export async function updateSettings(settings: Partial<Settings>, token: string): Promise<Settings> {
-  const res = await axios.put(`${API_BASE_URL}/settings/`, settings, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  return res.data
+export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
+  const res = await api.put(`/settings/`, settings);
+  return res.data;
 } 

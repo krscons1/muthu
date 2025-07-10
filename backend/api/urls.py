@@ -2,7 +2,8 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     ClientViewSet, ProjectViewSet, TagViewSet, TimeEntryViewSet,
-    RegisterView, SettingsView, ReportsView, CalendarView, FirebaseLoginView
+    RegisterView, SettingsView, ReportsView, CalendarView, FirebaseLoginView,
+    CurrentUserView
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -23,5 +24,6 @@ urlpatterns = [
     path('reports/', ReportsView.as_view(), name='reports'),
     path('calendar/', CalendarView.as_view(), name='calendar'),
     path('auth/firebase-login/', FirebaseLoginView.as_view(), name='firebase_login'),
+    path('user/', CurrentUserView.as_view(), name='current_user'),
     path('', include(router.urls)),
 ]

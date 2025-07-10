@@ -1,11 +1,9 @@
-"use client"
-
-import { useAuth } from "./hooks/useAuth";
+"use client";
+import { useAuth } from "../app/hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import DashboardPage from "./dashboard/page";
 
-export default function HomePage() {
+export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
@@ -15,8 +13,7 @@ export default function HomePage() {
     }
   }, [user, loading, router]);
 
-  if (loading) return null;
-  if (!user) return null;
+  if (loading || !user) return null; // or a loading spinner
 
-  return <DashboardPage />;
-}
+  return <>{children}</>;
+} 

@@ -15,11 +15,11 @@ import firebase_admin
 from firebase_admin import credentials
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent  # Now points to backend folder
 
-
-cred = credentials.Certificate("C:\\Users\\Lenovo\\muthu\\frontend\\firebase-adminsdk.json")
-firebase_admin.initialize_app(cred)
+# Remove duplicate Firebase initialization here
+# cred = credentials.Certificate(str(BASE_DIR / "firebase-adminsdk.json"))
+# firebase_admin.initialize_app(cred)
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
@@ -80,7 +80,7 @@ CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'api.authentication.FirebaseAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',

@@ -1,4 +1,4 @@
-import axios from "axios"
+import api from "./api"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -18,13 +18,12 @@ export interface ReportsFilters {
   tag?: string
 }
 
-export async function getReports(token: string, filters: ReportsFilters = {}): Promise<ReportsData> {
+export async function getReports(filters: ReportsFilters = {}): Promise<ReportsData> {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.append(key, value)
   })
-  const res = await axios.get(`${API_BASE_URL}/reports/`, {
-    headers: { Authorization: `Bearer ${token}` },
+  const res = await api.get(`/reports/`, {
     params,
   })
   return res.data

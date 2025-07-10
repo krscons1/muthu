@@ -13,6 +13,8 @@ import { getClients, getClientOptions, getClientDisplayName, Client } from "@/li
 import type { DateRange } from "react-day-picker"
 import { toast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
+import { useAuth } from "../hooks/useAuth"
+import { getReports } from "@/lib/reports-utils"
 
 interface TimeEntry {
   id: string
@@ -36,12 +38,20 @@ export default function ReportsPage() {
   const [selectedClient, setSelectedClient] = useState<string>("all")
   const [clientOptions, setClientOptions] = useState<string[]>([])
   const router = useRouter();
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  if (!user || loading) return null;
 
   useEffect(() => {
     async function fetchClients() {
       try {
-        const data = await getClients(token)
+        const data = await getClients()
         setClients(data)
         setClientOptions(getClientOptions(data))
       } catch (err) {
@@ -50,138 +60,28 @@ export default function ReportsPage() {
       }
     }
     fetchClients()
-  }, [token])
+  }, [user, loading, router])
 
   useEffect(() => {
-    const storedEntries = JSON.parse(localStorage.getItem("timeEntries") || "[]")
-    const storedClients = JSON.parse(localStorage.getItem("clients") || "[]")
-
-    // If no stored entries, add some sample data
-    if (storedEntries.length === 0) {
-      const sampleEntries = [
-        {
-          id: "1",
-          description: "Website homepage design",
-          project: "Website Redesign",
-          client: "Acme Corp",
-          tags: ["design", "frontend"],
-          startTime: new Date(2025, 5, 25, 9, 0),
-          endTime: new Date(2025, 5, 25, 12, 30),
-          duration: 12600,
-        },
-        {
-          id: "2",
-          description: "Client meeting and requirements gathering",
-          project: "Website Redesign",
-          client: "Acme Corp",
-          tags: ["meeting"],
-          startTime: new Date(2025, 5, 26, 14, 0),
-          endTime: new Date(2025, 5, 26, 15, 30),
-          duration: 5400,
-        },
-        {
-          id: "3",
-          description: "Mobile app wireframes",
-          project: "Mobile App Development",
-          client: "TechStart Inc",
-          tags: ["design", "mobile"],
-          startTime: new Date(2025, 5, 24, 10, 0),
-          endTime: new Date(2025, 5, 24, 16, 0),
-          duration: 21600,
-        },
-        {
-          id: "4",
-          description: "API development and testing",
-          project: "Mobile App Development",
-          client: "TechStart Inc",
-          tags: ["development", "backend"],
-          startTime: new Date(2025, 5, 27, 9, 30),
-          endTime: new Date(2025, 5, 27, 17, 0),
-          duration: 27000,
-        },
-        {
-          id: "5",
-          description: "Marketing campaign brainstorming",
-          project: "Marketing Campaign",
-          client: "Design Studio",
-          tags: ["marketing", "planning"],
-          startTime: new Date(2025, 5, 23, 13, 0),
-          endTime: new Date(2025, 5, 23, 15, 30),
-          duration: 9000,
-        },
-      ]
-
-      localStorage.setItem("timeEntries", JSON.stringify(sampleEntries))
-
-      // Also ensure we have matching clients
-      if (storedClients.length === 0) {
-        const sampleClients = [
-          {
-            id: "1",
-            name: "John Smith",
-            email: "john@acmecorp.com",
-            phone: "+1 (555) 123-4567",
-            company: "Acme Corp",
-            status: "active",
-            createdAt: new Date("2024-01-15"),
-          },
-          {
-            id: "2",
-            name: "Sarah Johnson",
-            email: "sarah@techstart.com",
-            phone: "+1 (555) 987-6543",
-            company: "TechStart Inc",
-            status: "active",
-            createdAt: new Date("2024-02-01"),
-          },
-          {
-            id: "3",
-            name: "Mike Wilson",
-            email: "mike@designstudio.com",
-            company: "Design Studio",
-            status: "active",
-            createdAt: new Date("2024-01-01"),
-          },
-        ]
-        localStorage.setItem("clients", JSON.stringify(sampleClients))
-      }
-
-      setEntries(
-        sampleEntries.map((entry: any) => ({
-          ...entry,
-          startTime: new Date(entry.startTime),
-          endTime: entry.endTime ? new Date(entry.endTime) : undefined,
-        })),
-      )
-    } else {
-      setEntries(
-        storedEntries.map((entry: any) => ({
-          ...entry,
-          startTime: new Date(entry.startTime),
-          endTime: entry.endTime ? new Date(entry.endTime) : undefined,
-        })),
-      )
-    }
-  }, [])
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.replace("/login");
+    async function fetchReports() {
+      try {
+        const data = await getReports(dateRange?.from, dateRange?.to)
+        setEntries(Array.isArray(data) ? data : [])
+      } catch (err) {
+        setEntries([])
       }
     }
-  }, [router]);
+    fetchReports()
+  }, [dateRange])
 
-  const filteredEntries = entries.filter((entry) => {
+  const filteredEntries = Array.isArray(entries) ? entries.filter((entry) => {
     const entryDate = new Date(entry.startTime)
     const inDateRange = !dateRange?.from || !dateRange?.to || (entryDate >= dateRange.from && entryDate <= dateRange.to)
     const matchesProject = selectedProject === "all" || entry.project === selectedProject
     const matchesClient = selectedClient === "all" || getClientDisplayName(clients, entry.client || "") === selectedClient
 
     return inDateRange && matchesProject && matchesClient
-  })
+  }) : []
 
   const totalDuration = filteredEntries.reduce((sum, entry) => sum + entry.duration, 0)
   const totalEntries = filteredEntries.length
@@ -297,7 +197,6 @@ export default function ReportsPage() {
       },
     ]
 
-    localStorage.setItem("timeEntries", JSON.stringify(sampleEntries))
     setEntries(
       sampleEntries.map((entry: any) => ({
         ...entry,

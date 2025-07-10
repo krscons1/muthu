@@ -22,10 +22,14 @@ import { Plus, FolderOpen, MoreHorizontal, Edit, Trash2, Users, Calendar } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { getProjects, createProject, updateProject, deleteProject, Project as ApiProject } from "@/lib/project-utils"
 import { useRouter } from "next/navigation"
+import { useAuth } from "../hooks/useAuth"
+import { toast } from "@/components/ui/use-toast";
+import { getClients, Client } from "@/lib/client-utils";
 
 interface Project extends ApiProject {}
 
 export default function ProjectsPage() {
+  const { user, loading } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -38,49 +42,64 @@ export default function ProjectsPage() {
     description: "",
     due_date: "",
   })
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const [clients, setClients] = useState<Client[]>([]);
   const router = useRouter()
 
-  const clients = ["Acme Corp", "TechStart Inc", "Design Studio", "Local Business"]
   const colors = ["#3b82f6", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4"]
 
   useEffect(() => {
-    async function fetchProjects() {
-      setIsLoading(true)
-      try {
-        const data = await getProjects(token)
-        setProjects(data)
-      } catch (err) {
-        // handle error (show toast, etc)
-      } finally {
-        setIsLoading(false)
-      }
+    if (!loading && !user) {
+      router.replace("/login")
+      return
     }
-    fetchProjects()
-  }, [token])
+    if (!loading && user) {
+      async function fetchProjects() {
+        setIsLoading(true)
+        try {
+          const data = await getProjects()
+          setProjects(data)
+        } catch (err) {
+          // handle error (show toast, etc)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      async function fetchClientsList() {
+        try {
+          const data = await getClients();
+          setClients(data);
+        } catch (err) {
+          // handle error (show toast, etc)
+        }
+      }
+      fetchProjects()
+      fetchClientsList()
+    }
+  }, [user, loading, router])
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        router.replace("/login")
-      }
-    }
-  }, [router])
+  if (!user || loading) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
     try {
       if (editingProject) {
-        const updated = await updateProject(editingProject.id, formData, token)
+        const updated = await updateProject(editingProject.id, formData)
         setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+        toast({ title: "Project updated", description: `Project '${updated.name}' updated successfully.` })
       } else {
-        const created = await createProject(formData, token)
+        const created = await createProject(formData)
         setProjects((prev) => [...prev, created])
+        toast({ title: "Project created", description: `Project '${created.name}' created successfully.` })
       }
       resetForm()
-    } catch (err) {
-      // handle error (show toast, etc)
+    } catch (err: any) {
+      console.error("Create/Update Project Error:", err)
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to create or update project. Check your network and required fields.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -111,9 +130,10 @@ export default function ProjectsPage() {
   }
 
   const handleDeleteProject = async (id: string) => {
+    if (!user) return
     if (confirm("Are you sure you want to delete this project?")) {
       try {
-        await deleteProject(id, token)
+        await deleteProject(id)
         setProjects((prev) => prev.filter((p) => p.id !== id))
       } catch (err) {
         // handle error (show toast, etc)
@@ -142,6 +162,15 @@ export default function ProjectsPage() {
   const isDueToday = (dueDate?: Date) => {
     if (!dueDate) return false
     return dueDate.toDateString() === new Date().toDateString()
+  }
+
+  // Show loading spinner while auth is loading
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-xl">
+        Loading...
+      </div>
+    );
   }
 
   return (
@@ -185,8 +214,8 @@ export default function ProjectsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map((client) => (
-                      <SelectItem key={client} value={client}>
-                        {client}
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.company || client.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -1,4 +1,4 @@
-import axios from "axios"
+import api from "./api"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -30,9 +30,8 @@ export interface CalendarData {
   projects: CalendarProject[]
 }
 
-export async function getCalendar(token: string, month: string): Promise<CalendarData> {
-  const res = await axios.get(`${API_BASE_URL}/calendar/`, {
-    headers: { Authorization: `Bearer ${token}` },
+export async function getCalendar(month: string): Promise<CalendarData> {
+  const res = await api.get(`/calendar/`, {
     params: { month },
   })
   return res.data

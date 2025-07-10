@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getTimeEntries, createTimeEntry, updateTimeEntry, deleteTimeEntry, TimeEntry as ApiTimeEntry } from "@/lib/time-entry-utils"
 import { useRouter } from "next/navigation"
 import { getClientDisplayName } from "@/lib/client-utils"
+import { useAuth } from "../hooks/useAuth";
 
 interface TimeEntry extends ApiTimeEntry {}
 
@@ -38,6 +39,17 @@ interface CurrentTimer {
 }
 
 export default function TrackerPage() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  if (!user || loading) return null;
+
   // State
   const [currentTimer, setCurrentTimer] = useState<CurrentTimer | null>(null)
   const [entries, setEntries] = useState<TimeEntry[]>([])
@@ -49,7 +61,6 @@ export default function TrackerPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
-  const router = useRouter()
 
   // Refs
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -63,7 +74,7 @@ export default function TrackerPage() {
     async function fetchEntries() {
       setIsLoading(true)
       try {
-        const data = await getTimeEntries(token)
+        const data = await getTimeEntries()
         setEntries(data)
       } catch (err) {
         // handle error (show toast, etc)
@@ -72,7 +83,7 @@ export default function TrackerPage() {
       }
     }
     fetchEntries()
-  }, [token])
+  }, [])
 
   // Redirect to login if not authenticated
   useEffect(() => {

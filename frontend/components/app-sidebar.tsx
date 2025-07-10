@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useAuth } from "../app/hooks/useAuth"
 import {
   Calendar,
   Clock,
@@ -19,6 +20,8 @@ import { usePathname } from "next/navigation"
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 export function AppSidebar({ className }: SidebarProps) {
+  const { user, loading } = useAuth();
+  if (loading || !user) return null;
   const pathname = usePathname()
   const isMobile = useIsMobile()
 

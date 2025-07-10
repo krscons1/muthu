@@ -8,6 +8,8 @@ import { ChevronLeft, ChevronRight, CalendarIcon, Clock, FolderOpen } from "luci
 import { formatTime } from "@/lib/utils"
 import { getCalendar, CalendarEntry, CalendarProject } from "@/lib/calendar-utils"
 import { useRouter } from "next/navigation"
+import { useAuth } from "../hooks/useAuth"
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 interface TimeEntry {
   id: string
@@ -15,8 +17,8 @@ interface TimeEntry {
   project?: string
   client?: string
   tags: string[]
-  startTime: Date
-  endTime?: Date
+  start_time: Date
+  end_time?: Date
   duration: number
 }
 
@@ -27,97 +29,96 @@ interface Project {
   color: string
   status: "active" | "completed" | "on-hold"
   description?: string
-  dueDate?: Date
-  createdAt: Date
+  due_date?: Date
+  created_at: Date
 }
 
 export default function CalendarPage() {
-  const [entries, setEntries] = useState<CalendarEntry[]>([])
-  const [projects, setProjects] = useState<CalendarProject[]>([])
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
-  const [clients, setClients] = useState<any[]>([])
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
-  const router = useRouter()
+  const { user, loading } = useAuth();
+  const [entries, setEntries] = useState<CalendarEntry[]>([]);
+  const [projects, setProjects] = useState<CalendarProject[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [clients, setClients] = useState<any[]>([]);
+  const router = useRouter();
 
   useEffect(() => {
-    async function fetchCalendar() {
-      const month = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`
-      try {
-        const data = await getCalendar(token, month)
-        setEntries(data.entries)
-        setProjects(data.projects)
-      } catch (err) {
-        // handle error (show toast, etc)
-      }
+    if (!loading && !user) {
+      router.replace("/login");
+      return;
     }
-    fetchCalendar()
-  }, [token, currentDate])
-
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.replace("/login");
+    if (!loading && user) {
+      async function fetchCalendar() {
+        const month = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`;
+        try {
+          const data = await getCalendar(month);
+          setEntries(data.entries);
+          setProjects(data.projects);
+        } catch (err) {
+          // handle error (show toast, etc)
+        }
       }
+      fetchCalendar();
     }
-  }, [router]);
+  }, [user, loading, currentDate, router]);
 
   const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear()
-    const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
-
-    const days = []
-
-    // Add empty cells for days before the first day of the month
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    const days = [];
     for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
+      days.push(null);
     }
-
-    // Add all days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      days.push(new Date(year, month, day))
+      days.push(new Date(year, month, day));
     }
-
-    return days
-  }
+    return days;
+  };
 
   const getEntriesForDate = (date: Date) => {
-    return entries.filter((entry) => new Date(entry.startTime).toDateString() === date.toDateString())
-  }
+    return entries.filter((entry) => new Date(entry.start_time).toDateString() === date.toDateString());
+  };
 
   const getProjectsForDate = (date: Date) => {
-    return projects.filter((project) => project.dueDate && project.dueDate.toDateString() === date.toDateString())
-  }
+    return projects.filter((project) => project.due_date && new Date(project.due_date).toDateString() === date.toDateString());
+  };
 
   const getTotalTimeForDate = (date: Date) => {
-    return getEntriesForDate(date).reduce((sum, entry) => sum + entry.duration, 0)
-  }
+    return getEntriesForDate(date).reduce((sum, entry) => sum + entry.duration, 0);
+  };
 
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate((prev) => {
-      const newDate = new Date(prev)
+      const newDate = new Date(prev);
       if (direction === "prev") {
-        newDate.setMonth(prev.getMonth() - 1)
+        newDate.setMonth(prev.getMonth() - 1);
       } else {
-        newDate.setMonth(prev.getMonth() + 1)
+        newDate.setMonth(prev.getMonth() + 1);
       }
-      return newDate
-    })
+      return newDate;
+    });
+  };
+
+  const days = getDaysInMonth(currentDate);
+  const monthName = currentDate.toLocaleString("default", { month: "long", year: "numeric" });
+  const selectedDateEntries = selectedDate ? getEntriesForDate(selectedDate) : [];
+  const selectedDateProjects = selectedDate ? getProjectsForDate(selectedDate) : [];
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-xl">
+        Loading...
+      </div>
+    );
   }
 
-  const days = getDaysInMonth(currentDate)
-  const monthName = currentDate.toLocaleString("default", { month: "long", year: "numeric" })
-  const selectedDateEntries = selectedDate ? getEntriesForDate(selectedDate) : []
-  const selectedDateProjects = selectedDate ? getProjectsForDate(selectedDate) : []
-
   return (
-    <div className="space-y-6">
+    <ProtectedRoute>
+      {/* Calendar content starts here */}
       <div>
         <h1 className="text-3xl font-bold">Calendar</h1>
         <p className="text-muted-foreground">View your time entries and project due dates in calendar format</p>
@@ -285,8 +286,8 @@ export default function CalendarPage() {
                             </div>
                             <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
                               <span>
-                                {new Date(entry.startTime).toLocaleTimeString()} -{" "}
-                                {entry.endTime ? new Date(entry.endTime).toLocaleTimeString() : "Running"}
+                                {new Date(entry.start_time).toLocaleTimeString()} -{" "}
+                                {entry.end_time ? new Date(entry.end_time).toLocaleTimeString() : "Running"}
                               </span>
                               <span className="font-mono">{formatTime(entry.duration)}</span>
                             </div>
@@ -324,8 +325,8 @@ export default function CalendarPage() {
                       entries
                         .filter(
                           (entry) =>
-                            new Date(entry.startTime).getMonth() === currentDate.getMonth() &&
-                            new Date(entry.startTime).getFullYear() === currentDate.getFullYear(),
+                            new Date(entry.start_time).getMonth() === currentDate.getMonth() &&
+                            new Date(entry.start_time).getFullYear() === currentDate.getFullYear(),
                         )
                         .reduce((sum, entry) => sum + entry.duration, 0),
                     )}
@@ -339,10 +340,10 @@ export default function CalendarPage() {
                         entries
                           .filter(
                             (entry) =>
-                              new Date(entry.startTime).getMonth() === currentDate.getMonth() &&
-                              new Date(entry.startTime).getFullYear() === currentDate.getFullYear(),
+                              new Date(entry.start_time).getMonth() === currentDate.getMonth() &&
+                              new Date(entry.start_time).getFullYear() === currentDate.getFullYear(),
                           )
-                          .map((entry) => new Date(entry.startTime).toDateString()),
+                          .map((entry) => new Date(entry.start_time).toDateString()),
                       ).size
                     }
                   </span>
@@ -353,8 +354,8 @@ export default function CalendarPage() {
                     {
                       entries.filter(
                         (entry) =>
-                          new Date(entry.startTime).getMonth() === currentDate.getMonth() &&
-                          new Date(entry.startTime).getFullYear() === currentDate.getFullYear(),
+                          new Date(entry.start_time).getMonth() === currentDate.getMonth() &&
+                          new Date(entry.start_time).getFullYear() === currentDate.getFullYear(),
                       ).length
                     }
                   </span>
@@ -365,9 +366,9 @@ export default function CalendarPage() {
                     {
                       projects.filter(
                         (project) =>
-                          project.dueDate &&
-                          project.dueDate.getMonth() === currentDate.getMonth() &&
-                          project.dueDate.getFullYear() === currentDate.getFullYear(),
+                          project.due_date &&
+                          new Date(project.due_date).getMonth() === currentDate.getMonth() &&
+                          new Date(project.due_date).getFullYear() === currentDate.getFullYear(),
                       ).length
                     }
                   </span>
@@ -377,6 +378,6 @@ export default function CalendarPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </ProtectedRoute>
   )
 }

@@ -21,10 +21,12 @@ import { Plus, Tag, MoreHorizontal, Edit, Trash2, Hash } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { getTags, createTag, updateTag, deleteTag, Tag as ApiTag } from "@/lib/tag-utils"
 import { useRouter } from "next/navigation"
+import { useAuth } from "../hooks/useAuth"
 
 interface TagItem extends ApiTag {}
 
 export default function TagsPage() {
+  const { user, loading } = useAuth()
   const [tags, setTags] = useState<TagItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -34,41 +36,40 @@ export default function TagsPage() {
     color: "#3b82f6",
     description: "",
   })
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
   const router = useRouter()
 
   useEffect(() => {
-    async function fetchTags() {
-      setIsLoading(true)
-      try {
-        const data = await getTags(token)
-        setTags(data)
-      } catch (err) {
-        // handle error (show toast, etc)
-      } finally {
-        setIsLoading(false)
-      }
+    if (!loading && !user) {
+      router.replace("/login")
+      return
     }
-    fetchTags()
-  }, [token])
+    if (!loading && user) {
+      async function fetchTags() {
+        setIsLoading(true)
+        try {
+          const data = await getTags()
+          setTags(data)
+        } catch (err) {
+          // handle error (show toast, etc)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      fetchTags()
+    }
+  }, [user, loading, router])
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token")
-      if (!token) {
-        router.replace("/login")
-      }
-    }
-  }, [router])
+  if (!user || loading) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
     try {
       if (editingTag) {
-        const updated = await updateTag(editingTag.id, formData, token)
+        const updated = await updateTag(editingTag.id, formData)
         setTags((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
       } else {
-        const created = await createTag(formData, token)
+        const created = await createTag(formData)
         setTags((prev) => [...prev, created])
       }
       resetForm()
@@ -98,8 +99,9 @@ export default function TagsPage() {
   }
 
   const handleDeleteTag = async (id: string) => {
+    if (!user) return
     try {
-      await deleteTag(id, token)
+      await deleteTag(id)
       setTags((prev) => prev.filter((t) => t.id !== id))
     } catch (err) {
       // handle error (show toast, etc)
@@ -120,6 +122,15 @@ export default function TagsPage() {
     "#ec4899",
     "#6366f1",
   ]
+
+  // Show loading spinner while auth is loading
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center text-xl">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth"
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, sendPasswordResetEmail } from "firebase/auth"
 import { auth } from "@/lib/firebase"
-import axios from "axios"
+import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,21 +12,39 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
 import { FcGoogle } from "react-icons/fc"
 import Link from "next/link"
+import { useAuth } from "../hooks/useAuth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api"
 
 export default function LoginPage() {
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const router = useRouter()
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      router.replace("/dashboard"); // or "/" if dashboard is at root
+    }
+  }, [user, router]);
+
+  if (user) return null; // Prevent showing login form if already logged in
 
   // Helper to send Firebase ID token to backend
   const sendTokenToBackend = async (idToken: string) => {
-    // You must implement this endpoint in your Django backend to verify the Firebase token and return a session/JWT
-    const res = await axios.post(`${API_BASE_URL}/auth/firebase-login/`, { id_token: idToken })
-    localStorage.setItem("token", res.data.token)
+    console.log("Firebase ID Token:", idToken); // DEBUG
+    try {
+      const res = await api.post(`/auth/firebase-login/`, { id_token: idToken })
+      console.log("Backend response:", res.data); // DEBUG
+      localStorage.setItem("django_jwt", res.data.token)
+      localStorage.setItem("django_refresh", res.data.refresh)
+    } catch (err) {
+      console.error("Backend error:", err);
+      throw err;
+    }
   }
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -38,7 +56,7 @@ export default function LoginPage() {
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
-      router.push("/dashboard")
+      router.push("/")
     } catch (err: any) {
       setError(err?.message || "Invalid email or password. Please try again.")
     } finally {
@@ -55,13 +73,36 @@ export default function LoginPage() {
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
-      router.push("/dashboard")
+      router.push("/")
     } catch (err: any) {
       setError(err?.message || "Google sign-in failed. Please try again.")
     } finally {
       setLoading(false)
     }
   }
+
+  const handleForgotPassword = async () => {
+    const emailPrompt = prompt("Enter your email to reset your password:", email);
+    if (!emailPrompt) return;
+    try {
+      await sendPasswordResetEmail(auth, emailPrompt);
+      toast({ title: "Password reset email sent!", description: "Check your inbox for reset instructions." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to send reset email.", variant: "destructive" });
+    }
+  };
+
+  const handleTestFirebase = async () => {
+    try {
+      if (auth) {
+        toast({ title: "Firebase connection successful!", description: auth.app.name });
+      } else {
+        toast({ title: "Firebase connection failed!", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Firebase connection failed!", description: err?.message || "Unknown error.", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 to-indigo-200">
@@ -99,7 +140,11 @@ export default function LoginPage() {
               />
             </div>
             {error && (
-              <div className="text-red-600 text-sm text-center font-medium">{error}</div>
+              <div className="text-red-600 text-sm text-center font-medium">
+                {error.includes("auth/invalid-credential")
+                  ? "Invalid email or password. Please try again or use 'Forgot password?' to reset your password."
+                  : error}
+              </div>
             )}
             <Button
               type="submit"
@@ -108,30 +153,55 @@ export default function LoginPage() {
             >
               {loading ? "Signing in..." : "Sign In"}
             </Button>
+            <div className="my-6 flex items-center justify-center gap-2">
+              <span className="h-px flex-1 bg-slate-200" />
+              <span className="text-xs text-slate-500 uppercase">or</span>
+              <span className="h-px flex-1 bg-slate-200" />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full flex items-center justify-center gap-2 font-semibold border-slate-300 hover:bg-slate-100"
+              onClick={handleGoogleLogin}
+              disabled={loading}
+            >
+              <FcGoogle className="h-5 w-5" /> Sign in with Google
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full flex items-center justify-center gap-2 font-semibold border-slate-300 hover:bg-slate-100 mt-4"
+              onClick={() => router.push("/signup")}
+              disabled={loading}
+            >
+              Register
+            </Button>
+            <div className="w-full mt-2 text-center">
+              <button
+                type="button"
+                className="text-blue-600 hover:underline text-xs mt-2"
+                onClick={handleForgotPassword}
+                disabled={loading}
+              >
+                Forgot password?
+              </button>
+            </div>
+            <div className="w-full mt-2 text-center">
+              <button
+                type="button"
+                className="text-green-600 hover:underline text-xs mt-2"
+                onClick={handleTestFirebase}
+                disabled={loading}
+              >
+                Test Firebase Connection
+              </button>
+            </div>
+            <div className="w-full mt-2 text-center">
+              <Link href="/signup" className="text-blue-600 hover:underline">
+                New user? Create an account
+              </Link>
+            </div>
           </form>
-          <div className="my-6 flex items-center justify-center gap-2">
-            <span className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs text-slate-500 uppercase">or</span>
-            <span className="h-px flex-1 bg-slate-200" />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full flex items-center justify-center gap-2 font-semibold border-slate-300 hover:bg-slate-100"
-            onClick={handleGoogleLogin}
-            disabled={loading}
-          >
-            <FcGoogle className="h-5 w-5" /> Sign in with Google
-          </Button>
-          <Button
-            type="button"
-            variant="link"
-            className="w-full mt-4 text-center text-blue-600 hover:underline"
-            onClick={() => router.push("/signup")}
-            disabled={loading}
-          >
-            Don&apos;t have an account? Sign up
-          </Button>
         </CardContent>
       </Card>
     </div>

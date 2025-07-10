@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { getTimeEntries, TimeEntry as ApiTimeEntry } from "@/lib/time-entry-utils"
 import { getClients, Client as ApiClient } from "@/lib/client-utils"
+import { useAuth } from "../hooks/useAuth"
+import { useRouter } from "next/navigation";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 interface TimeEntry extends ApiTimeEntry {}
 interface Client extends ApiClient {}
@@ -20,36 +23,49 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const { toast } = useToast()
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : ""
+  const { user, loading } = useAuth()
+  const router = useRouter();
 
   useEffect(() => {
-    async function fetchData() {
-      setIsLoading(true)
-      try {
-        const [entriesData, clientsData] = await Promise.all([
-          getTimeEntries(token),
-          getClients(token),
-        ])
-        setEntries(entriesData)
-        setClients(clientsData)
-      } catch (error) {
-        toast({
-          title: "Error loading data",
-          description: "There was a problem loading your dashboard data.",
-          variant: "destructive",
-        })
-      } finally {
-        setIsLoading(false)
-      }
+    if (!loading && !user) {
+      router.replace("/login");
     }
-    fetchData()
-  }, [token])
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!loading && !user) {
+      // Optionally, you can redirect to login here if needed
+      return;
+    }
+    if (!loading && user) {
+      async function fetchData() {
+        setIsLoading(true)
+        try {
+          const [entriesData, clientsData] = await Promise.all([
+            getTimeEntries(),
+            getClients(),
+          ])
+          setEntries(entriesData)
+          setClients(clientsData)
+        } catch (error) {
+          toast({
+            title: "Error loading data",
+            description: "There was a problem loading your dashboard data.",
+            variant: "destructive",
+          })
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      fetchData()
+    }
+  }, [user, loading])
 
   // Safe calculations with error handling
   const todayTotal = entries
     .filter((entry) => {
       try {
-        return new Date(entry.startTime).toDateString() === new Date().toDateString()
+        return new Date(entry.start_time).toDateString() === new Date().toDateString()
       } catch {
         return false
       }
@@ -59,7 +75,7 @@ export default function DashboardPage() {
   const weekTotal = entries
     .filter((entry) => {
       try {
-        const entryDate = new Date(entry.startTime)
+        const entryDate = new Date(entry.start_time)
         const today = new Date()
         const weekStart = new Date(today)
         weekStart.setDate(today.getDate() - today.getDay())
@@ -120,157 +136,160 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Overview of your time tracking activity</p>
+    <ProtectedRoute>
+      {/* Dashboard content starts here */}
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground">Overview of your time tracking activity</p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm">
+              Add Sample Data
+            </Button>
+            <Button variant="outline" size="sm">
+              Clear All Data
+            </Button>
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            Add Sample Data
-          </Button>
-          <Button variant="outline" size="sm">
-            Clear All Data
-          </Button>
-        </div>
-      </div>
-
-      {/* Current Timer */}
-      {currentEntry && (
-        <Card className="border-primary">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-primary">
-              <Play className="h-5 w-5" />
-              Currently Tracking
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">{currentEntry.description}</div>
-                {currentEntry.project && <div className="text-sm text-muted-foreground">{currentEntry.project}</div>}
-              </div>
-              <div className="text-2xl font-mono">
-                {formatTime(Math.floor((Date.now() - new Date(currentEntry.startTime).getTime()) / 1000))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Stats Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatTime(todayTotal)}</div>
-            <p className="text-xs text-muted-foreground">
-              {
-                entries.filter((e) => {
-                  try {
-                    return new Date(e.startTime).toDateString() === new Date().toDateString()
-                  } catch {
-                    return false
-                  }
-                }).length
-              }{" "}
-              entries
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">This Week</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatTime(weekTotal)}</div>
-            <p className="text-xs text-muted-foreground">{Math.round(weekProgress)}% of weekly goal</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{entries.length}</div>
-            <p className="text-xs text-muted-foreground">All time tracking records</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Weekly Goal</CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatTime(weeklyGoal)}</div>
-            <Progress value={weekProgress} className="mt-2" />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Top Projects */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Projects</CardTitle>
-          <CardDescription>Most tracked projects this period</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {topProjects.length > 0 ? (
-            <div className="space-y-4">
-              {topProjects.map(([project, duration]) => (
-                <div key={project} className="flex items-center justify-between">
-                  <div className="font-medium">{project}</div>
-                  <div className="font-mono">{formatTime(duration)}</div>
+        {/* Current Timer */}
+        {currentEntry && (
+          <Card className="border-primary">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <Play className="h-5 w-5" />
+                Currently Tracking
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{currentEntry.description}</div>
+                  {currentEntry.project && <div className="text-sm text-muted-foreground">{currentEntry.project}</div>}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">No project data available yet</div>
-          )}
-        </CardContent>
-      </Card>
+                <div className="text-2xl font-mono">
+                  {formatTime(Math.floor((Date.now() - new Date(currentEntry.start_time).getTime()) / 1000))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>Your latest time entries</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {entries.length > 0 ? (
-            <div className="space-y-3">
-              {entries
-                .slice(-10)
-                .reverse()
-                .map((entry) => (
-                  <div key={entry.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <div className="font-medium">{entry.description}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {entry.project && `${entry.project} • `}
-                        {entry.client && `${getClientDisplayName(entry.client)} • `}
-                        {new Date(entry.startTime).toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="font-mono">{formatTime(entry.duration || 0)}</div>
+        {/* Stats Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatTime(todayTotal)}</div>
+              <p className="text-xs text-muted-foreground">
+                {
+                  entries.filter((e) => {
+                    try {
+                      return new Date(e.start_time).toDateString() === new Date().toDateString()
+                    } catch {
+                      return false
+                    }
+                  }).length
+                }{" "}
+                entries
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">This Week</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatTime(weekTotal)}</div>
+              <p className="text-xs text-muted-foreground">{Math.round(weekProgress)}% of weekly goal</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Entries</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{entries.length}</div>
+              <p className="text-xs text-muted-foreground">All time tracking records</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Weekly Goal</CardTitle>
+              <Target className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatTime(weeklyGoal)}</div>
+              <Progress value={weekProgress} className="mt-2" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Top Projects */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top Projects</CardTitle>
+            <CardDescription>Most tracked projects this period</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topProjects.length > 0 ? (
+              <div className="space-y-4">
+                {topProjects.map(([project, duration]) => (
+                  <div key={project} className="flex items-center justify-between">
+                    <div className="font-medium">{project}</div>
+                    <div className="font-mono">{formatTime(duration)}</div>
                   </div>
                 ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">No time entries yet. Start tracking your time!</div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No project data available yet</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle>
+            <CardDescription>Your latest time entries</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {entries.length > 0 ? (
+              <div className="space-y-3">
+                {entries
+                  .slice(-10)
+                  .reverse()
+                  .map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <div className="font-medium">{entry.description}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {entry.project && `${entry.project} • `}
+                          {entry.client && `${getClientDisplayName(entry.client)} • `}
+                          {new Date(entry.start_time).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="font-mono">{formatTime(entry.duration || 0)}</div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No time entries yet. Start tracking your time!</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </ProtectedRoute>
   )
 }

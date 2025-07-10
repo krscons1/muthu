@@ -1,4 +1,5 @@
-import axios from "axios"
+import api from "./api"
+import { getAuth } from "firebase/auth"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
 
@@ -14,38 +15,42 @@ export interface Client {
   created_at: string
 }
 
-export async function getClients(token: string): Promise<Client[]> {
-  const res = await axios.get(`${API_BASE_URL}/clients/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+async function getFirebaseToken(): Promise<string> {
+  const auth = getAuth();
+  // Wait for the user to be loaded if not immediately available
+  let user = auth.currentUser;
+  if (!user) {
+    // Try to wait for the user to be set (in case of slow auth)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    user = auth.currentUser;
+  }
+  if (!user) throw new Error("User not authenticated. Please log in again.");
+  // Always force refresh the token to avoid expired tokens
+  return await user.getIdToken(true);
+}
+
+export async function getClients(): Promise<Client[]> {
+  const res = await api.get(`/clients/`)
   return res.data
 }
 
-export async function getClientById(id: string, token: string): Promise<Client> {
-  const res = await axios.get(`${API_BASE_URL}/clients/${id}/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function getClientById(id: string): Promise<Client> {
+  const res = await api.get(`/clients/${id}/`)
   return res.data
 }
 
-export async function createClient(client: Omit<Client, "id" | "created_at">, token: string): Promise<Client> {
-  const res = await axios.post(`${API_BASE_URL}/clients/`, client, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function createClient(client: Omit<Client, "id" | "created_at">): Promise<Client> {
+  const res = await api.post(`/clients/`, client)
   return res.data
 }
 
-export async function updateClient(id: string, client: Partial<Client>, token: string): Promise<Client> {
-  const res = await axios.patch(`${API_BASE_URL}/clients/${id}/`, client, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function updateClient(id: string, client: Partial<Client>): Promise<Client> {
+  const res = await api.patch(`/clients/${id}/`, client)
   return res.data
 }
 
-export async function deleteClient(id: string, token: string): Promise<void> {
-  await axios.delete(`${API_BASE_URL}/clients/${id}/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+export async function deleteClient(id: string): Promise<void> {
+  await api.delete(`/clients/${id}/`)
 }
 
 export function getActiveClients(clients: Client[]): Client[] {

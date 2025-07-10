@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider } from "firebase/auth"
 import { auth } from "@/lib/firebase"
-import axios from "axios"
+import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,19 +12,30 @@ import { Label } from "@/components/ui/label"
 import { toast } from "@/components/ui/use-toast"
 import { FcGoogle } from "react-icons/fc"
 import Link from "next/link"
+import { useAuth } from "../hooks/useAuth";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api"
 
 export default function SignupPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user) {
+      router.replace("/dashboard"); // or "/" if dashboard is at root
+    }
+  }, [user, router]);
+
+  if (user) return null; // Prevent showing signup form if already logged in
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const router = useRouter()
 
   // Helper to send Firebase ID token to backend
   const sendTokenToBackend = async (idToken: string) => {
-    const res = await axios.post(`${API_BASE_URL}/auth/firebase-login/`, { id_token: idToken })
+    const res = await api.post(`/auth/firebase-login/`, { id_token: idToken })
     localStorage.setItem("token", res.data.token)
   }
 
@@ -98,7 +109,11 @@ export default function SignupPage() {
               />
             </div>
             {error && (
-              <div className="text-red-600 text-sm text-center font-medium">{error}</div>
+              <div className="text-red-600 text-sm text-center font-medium">
+                {error.includes("auth/email-already-in-use")
+                  ? "This email is already registered. Please log in or use 'Forgot password?' to reset your password."
+                  : error}
+              </div>
             )}
             <Button
               type="submit"
