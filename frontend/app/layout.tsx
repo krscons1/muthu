@@ -13,11 +13,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading) return <div className="flex h-screen items-center justify-center text-xl">Loading...</div>;
   if (!user) {
     // Only render login/signup content, no sidebar or dashboard
-    return (
-      <div className="flex h-screen items-center justify-center bg-gradient-primary">
-        <div className="w-full max-w-md mx-auto">{children}</div>
-      </div>
-    );
+    return <>{children}</>;
   }
   // Only render sidebar and header if authenticated
   return (

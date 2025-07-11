@@ -56,7 +56,6 @@ export default function LoginPage() {
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
-      router.push("/")
     } catch (err: any) {
       setError(err?.message || "Invalid email or password. Please try again.")
     } finally {
@@ -73,7 +72,6 @@ export default function LoginPage() {
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
-      router.push("/")
     } catch (err: any) {
       setError(err?.message || "Google sign-in failed. Please try again.")
     } finally {

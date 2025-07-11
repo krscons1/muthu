@@ -144,7 +144,6 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">Overview of your time tracking activity</p>
           </div>
-
           <div className="flex gap-2">
             <Button variant="outline" size="sm">
               Add Sample Data
@@ -154,7 +153,6 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
-
         {/* Current Timer */}
         {currentEntry && (
           <Card className="border-primary">
@@ -177,7 +175,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
-
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>

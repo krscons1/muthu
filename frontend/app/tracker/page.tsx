@@ -16,6 +16,7 @@ import { getTimeEntries, createTimeEntry, updateTimeEntry, deleteTimeEntry, Time
 import { useRouter } from "next/navigation"
 import { getClientDisplayName } from "@/lib/client-utils"
 import { useAuth } from "../hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
 interface TimeEntry extends ApiTimeEntry {}
 
@@ -71,19 +72,21 @@ export default function TrackerPage() {
 
   // Load data
   useEffect(() => {
-    async function fetchEntries() {
-      setIsLoading(true)
-      try {
-        const data = await getTimeEntries()
-        setEntries(data)
-      } catch (err) {
-        // handle error (show toast, etc)
-      } finally {
-        setIsLoading(false)
+    if (!loading && user) {
+      async function fetchEntries() {
+        setIsLoading(true)
+        try {
+          const data = await getTimeEntries()
+          setEntries(data)
+        } catch (err) {
+          // handle error (show toast, etc)
+        } finally {
+          setIsLoading(false)
+        }
       }
+      fetchEntries()
     }
-    fetchEntries()
-  }, [])
+  }, [user, loading])
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -380,178 +383,180 @@ export default function TrackerPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Time Tracker</h1>
-        <p className="text-muted-foreground">Track your time with precision</p>
-      </div>
+    <ProtectedRoute>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold">Time Tracker</h1>
+          <p className="text-muted-foreground">Track your time with precision</p>
+        </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Timer Interface */}
-      <Card style={{ backgroundColor: 'white' }} className="!bg-white">
-        <CardHeader>
-          <CardTitle>Current Timer</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label htmlFor="description">Description *</Label>
-              <Input
-                id="description"
-                placeholder="What are you working on?"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                disabled={!!currentTimer}
-                className={!description.trim() && !currentTimer ? "border-red-300" : ""}
-                required
-                style={{ backgroundColor: 'white' }}
-              />
-            </div>
+        {/* Timer Interface */}
+        <Card style={{ backgroundColor: 'white' }} className="!bg-white">
+          <CardHeader>
+            <CardTitle>Current Timer</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <Label htmlFor="description">Description *</Label>
+                <Input
+                  id="description"
+                  placeholder="What are you working on?"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  disabled={!!currentTimer}
+                  className={!description.trim() && !currentTimer ? "border-red-300" : ""}
+                  required
+                  style={{ backgroundColor: 'white' }}
+                />
+              </div>
 
-            <div>
-              <Label htmlFor="project">Project</Label>
-              <Select value={selectedProject} onValueChange={setSelectedProject} disabled={!!currentTimer}>
-                <SelectTrigger className="!bg-white" style={{ backgroundColor: 'white' }}>
-                  <SelectValue placeholder="No Project" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="No Project">No Project</SelectItem>
-                  {projects.map((project) => (
-                    <SelectItem key={project} value={project}>
-                      {project}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <div>
+                <Label htmlFor="project">Project</Label>
+                <Select value={selectedProject} onValueChange={setSelectedProject} disabled={!!currentTimer}>
+                  <SelectTrigger className="!bg-white" style={{ backgroundColor: 'white' }}>
+                    <SelectValue placeholder="No Project" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="No Project">No Project</SelectItem>
+                    {projects.map((project) => (
+                      <SelectItem key={project} value={project}>
+                        {project}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <Label htmlFor="client">Client</Label>
-              <Select value={selectedClient} onValueChange={setSelectedClient} disabled={!!currentTimer}>
-                <SelectTrigger className="!bg-white" style={{ backgroundColor: 'white' }}>
-                  <SelectValue placeholder="No Client" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="No Client">No Client</SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.company || client.name}>
-                      {client.company || client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {currentTimer ? (
-              <>
-                <div className="flex gap-2">
-                  <Button onClick={stopTimer} variant="destructive" size="lg">
-                    <Square className="h-4 w-4 mr-2" />
-                    Stop
-                  </Button>
-                  {currentTimer.isOnHold ? (
-                    <Button onClick={resumeTimer} variant="default" size="lg">
-                      <Play className="h-4 w-4 mr-2" />
-                      Resume
-                    </Button>
-                  ) : (
-                    <Button onClick={holdTimer} variant="outline" size="lg">
-                      <Pause className="h-4 w-4 mr-2" />
-                      Hold
-                    </Button>
-                  )}
-                  <Button onClick={skipTimer} variant="secondary" size="lg">
-                    <SkipForward className="h-4 w-4 mr-2" />
-                    Skip
-                  </Button>
-                </div>
-                <div className="text-3xl font-mono font-bold">{formatTime(currentTime)}</div>
-                {currentTimer.isOnHold && (
-                  <div className="flex items-center gap-2 text-orange-600">
-                    <Pause className="h-4 w-4" />
-                    <span className="text-sm font-medium">Timer on hold</span>
-                  </div>
-                )}
-              </>
-            ) : (
-              <Button onClick={startTimer} size="lg" disabled={!description.trim()} className="!text-black">
-                <Play className="h-4 w-4 mr-2 !text-black" />
-                Start Timer
-              </Button>
-            )}
-          </div>
-
-          {!description.trim() && !currentTimer && (
-            <p className="text-sm text-red-600">Please enter a description to start tracking time.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Today's Entries */}
-      <Card style={{ backgroundColor: 'white' }} className="!bg-white">
-        <CardHeader>
-          <CardTitle>Today's Time Entries</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {todayEntries.length > 0 ? (
-            <div className="space-y-3">
-              {todayEntries.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-medium">{entry.description}</div>
-                    <div className="flex items-center gap-2 mt-1">
-                      {entry.project && <Badge variant="secondary">{entry.project}</Badge>}
-                      {entry.client && <Badge variant="outline">{getClientDisplayNameLocal(entry.client)}</Badge>}
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(entry.startTime).toLocaleTimeString()} -{" "}
-                        {entry.endTime ? new Date(entry.endTime).toLocaleTimeString() : "Running"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="text-lg font-mono">{formatTime(entry.duration || 0)}</div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem disabled>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit (Coming Soon)
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteEntry(entry.id)} className="text-destructive">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))}
-
-              <div className="pt-4 border-t">
-                <div className="flex justify-between items-center font-semibold">
-                  <span>Total for today:</span>
-                  <span className="text-lg">{formatTime(todayTotal)}</span>
-                </div>
+              <div>
+                <Label htmlFor="client">Client</Label>
+                <Select value={selectedClient} onValueChange={setSelectedClient} disabled={!!currentTimer}>
+                  <SelectTrigger className="!bg-white" style={{ backgroundColor: 'white' }}>
+                    <SelectValue placeholder="No Client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="No Client">No Client</SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.company || client.name}>
+                        {client.company || client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">No time entries for today yet. Start tracking!</div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+
+            <div className="flex items-center gap-4">
+              {currentTimer ? (
+                <>
+                  <div className="flex gap-2">
+                    <Button onClick={stopTimer} variant="destructive" size="lg">
+                      <Square className="h-4 w-4 mr-2" />
+                      Stop
+                    </Button>
+                    {currentTimer.isOnHold ? (
+                      <Button onClick={resumeTimer} variant="default" size="lg">
+                        <Play className="h-4 w-4 mr-2" />
+                        Resume
+                      </Button>
+                    ) : (
+                      <Button onClick={holdTimer} variant="outline" size="lg">
+                        <Pause className="h-4 w-4 mr-2" />
+                        Hold
+                      </Button>
+                    )}
+                    <Button onClick={skipTimer} variant="secondary" size="lg">
+                      <SkipForward className="h-4 w-4 mr-2" />
+                      Skip
+                    </Button>
+                  </div>
+                  <div className="text-3xl font-mono font-bold">{formatTime(currentTime)}</div>
+                  {currentTimer.isOnHold && (
+                    <div className="flex items-center gap-2 text-orange-600">
+                      <Pause className="h-4 w-4" />
+                      <span className="text-sm font-medium">Timer on hold</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Button onClick={startTimer} size="lg" disabled={!description.trim()} className="!text-black">
+                  <Play className="h-4 w-4 mr-2 !text-black" />
+                  Start Timer
+                </Button>
+              )}
+            </div>
+
+            {!description.trim() && !currentTimer && (
+              <p className="text-sm text-red-600">Please enter a description to start tracking time.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Today's Entries */}
+        <Card style={{ backgroundColor: 'white' }} className="!bg-white">
+          <CardHeader>
+            <CardTitle>Today's Time Entries</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {todayEntries.length > 0 ? (
+              <div className="space-y-3">
+                {todayEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="font-medium">{entry.description}</div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {entry.project && <Badge variant="secondary">{entry.project}</Badge>}
+                        {entry.client && <Badge variant="outline">{getClientDisplayNameLocal(entry.client)}</Badge>}
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(entry.startTime).toLocaleTimeString()} -{" "}
+                          {entry.endTime ? new Date(entry.endTime).toLocaleTimeString() : "Running"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-lg font-mono">{formatTime(entry.duration || 0)}</div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem disabled>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit (Coming Soon)
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => deleteEntry(entry.id)} className="text-destructive">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="pt-4 border-t">
+                  <div className="flex justify-between items-center font-semibold">
+                    <span>Total for today:</span>
+                    <span className="text-lg">{formatTime(todayTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No time entries for today yet. Start tracking!</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </ProtectedRoute>
   )
 }
