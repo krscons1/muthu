@@ -36,7 +36,9 @@ export default function SignupPage() {
   // Helper to send Firebase ID token to backend
   const sendTokenToBackend = async (idToken: string) => {
     const res = await api.post(`/auth/firebase-login/`, { id_token: idToken })
-    localStorage.setItem("token", res.data.token)
+    localStorage.setItem("django_jwt", res.data.token)
+    localStorage.setItem("django_refresh", res.data.refresh)
+    localStorage.removeItem("token")
   }
 
   const handleEmailSignup = async (e: React.FormEvent) => {

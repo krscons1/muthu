@@ -21,6 +21,72 @@ import { getTimeEntries, deleteTimeEntry } from "@/lib/time-entry-utils";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 export default function SettingsPage() {
+  const [settings, setSettings] = useState<ApiSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+  const router = useRouter();
+  const [newPassword, setNewPassword] = useState("");
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const data = await getSettings();
+        setSettings(data);
+      } catch (err) {
+        toast({ title: "Error", description: "Failed to load settings.", variant: "destructive" });
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSettings();
+  }, []);
+
+  if (loading || !settings) {
+    return <div>Loading settings...</div>;
+  }
+
+  const exportData = () => {
+    if (!settings) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(settings, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "settings.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const clearAllData = () => {
+    if (confirm("Are you sure you want to clear all your data? This cannot be undone.")) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!settings) return;
+    try {
+      await updateSettings(settings);
+      toast({ title: "Settings saved!", description: "Your settings have been updated." });
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to save settings.", variant: "destructive" });
+    }
+  };
+
+  const handleChangePassword = async (newPassword: string) => {
+    try {
+      if (!auth.currentUser) {
+        toast({ title: "Error", description: "No user is logged in.", variant: "destructive" });
+        return;
+      }
+      await auth.currentUser.updatePassword(newPassword);
+      toast({ title: "Password changed!", description: "Your password has been updated." });
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to change password.", variant: "destructive" });
+    }
+  };
+
   return (
     <ProtectedRoute>
       {/* Settings content starts here */}
@@ -283,23 +349,15 @@ export default function SettingsPage() {
 
         <h2 className="text-lg font-semibold mt-8 mb-2">Change Password</h2>
         <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-          <input
+          <Input
             type="password"
-            className="w-full border rounded px-3 py-2"
-            placeholder="Enter new password"
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
-            required
-            minLength={6}
-            disabled={changing}
+            placeholder="Enter new password"
           />
-          <button
-            type="submit"
-            className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600"
-            disabled={changing || !newPassword}
-          >
-            {changing ? "Changing..." : "Change Password"}
-          </button>
+          <Button onClick={() => handleChangePassword(newPassword)} disabled={!newPassword}>
+            Change Password
+          </Button>
         </form>
       </div>
     </ProtectedRoute>

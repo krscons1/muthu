@@ -9,39 +9,43 @@ import { AuthProvider, useAuth } from "./hooks/useAuth"
 const inter = Inter({ subsets: ["latin"] })
 
 function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, authError } = useAuth();
   if (loading) return <div className="flex h-screen items-center justify-center text-xl">Loading...</div>;
-  if (!user) {
-    // Only render login/signup content, no sidebar or dashboard
-    return <>{children}</>;
-  }
-  // Only render sidebar and header if authenticated
   return (
-    <div className="flex h-screen bg-gradient-primary">
-      <AppSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="border-b border-white/10 shadow-sm bg-transparent">
-          <div className="flex items-center justify-between px-4 py-3">
-            <div className="flex items-center space-x-4">
-              <SidebarToggle />
-              <h1 className="text-xl font-semibold text-white">
-                M-Track
-              </h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                <span className="text-white text-sm font-medium">U</span>
+    <>
+      {authError && (
+        <div className="bg-red-600 text-white p-2 text-center">{authError}</div>
+      )}
+      {!user ? (
+        <>{children}</>
+      ) : (
+        <div className="flex h-screen bg-gradient-primary">
+          <AppSidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <header className="border-b border-white/10 shadow-sm bg-transparent">
+              <div className="flex items-center justify-between px-4 py-3">
+                <div className="flex items-center space-x-4">
+                  <SidebarToggle />
+                  <h1 className="text-xl font-semibold text-white">
+                    M-Track
+                  </h1>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                    <span className="text-white text-sm font-medium">U</span>
+                  </div>
+                </div>
               </div>
-            </div>
+            </header>
+            <main className="flex-1 overflow-auto">
+              <div className="container mx-auto p-6">
+                {children}
+              </div>
+            </main>
           </div>
-        </header>
-        <main className="flex-1 overflow-auto">
-          <div className="container mx-auto p-6">
-            {children}
-          </div>
-        </main>
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 

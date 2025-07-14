@@ -24,6 +24,7 @@ import { getClients, createClient, updateClient, deleteClient, Client as ApiClie
 import { useRouter } from "next/navigation"
 import { useAuth } from "../hooks/useAuth"
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { toast } from "@/components/ui/use-toast";
 
 interface Client extends ApiClient {}
 
@@ -81,13 +82,20 @@ export default function ClientsPage() {
       if (editingClient) {
         const updated = await updateClient(editingClient.id, formData)
         setClients((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+        toast({ title: "Client updated", description: `Client '${updated.name}' updated successfully.` })
       } else {
         const created = await createClient(formData)
         setClients((prev) => [...prev, created])
+        toast({ title: "Client created", description: `Client '${created.name}' created successfully.` })
       }
       resetForm()
-    } catch (err) {
-      // handle error (show toast, etc)
+    } catch (err: any) {
+      console.error("Create/Update Client Error:", err)
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to create or update client. Check your network and required fields.",
+        variant: "destructive",
+      })
     }
   }
 

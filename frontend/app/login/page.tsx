@@ -35,14 +35,20 @@ export default function LoginPage() {
 
   // Helper to send Firebase ID token to backend
   const sendTokenToBackend = async (idToken: string) => {
-    console.log("Firebase ID Token:", idToken); // DEBUG
     try {
       const res = await api.post(`/auth/firebase-login/`, { id_token: idToken })
-      console.log("Backend response:", res.data); // DEBUG
       localStorage.setItem("django_jwt", res.data.token)
       localStorage.setItem("django_refresh", res.data.refresh)
-    } catch (err) {
-      console.error("Backend error:", err);
+      localStorage.removeItem("token")
+    } catch (err: any) {
+      // Show backend error details if available
+      let msg = "Login failed. Please try again.";
+      if (err.response && err.response.data && err.response.data.detail) {
+        msg = err.response.data.detail;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      setError(msg);
       throw err;
     }
   }
@@ -53,9 +59,16 @@ export default function LoginPage() {
     setError("")
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      if (!userCredential.user) {
+        setError("Firebase login failed. No user returned.");
+        setLoading(false);
+        return;
+      }
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
+      console.log("JWT in localStorage:", localStorage.getItem("django_jwt"));
+      window.location.href = "/dashboard";
     } catch (err: any) {
       setError(err?.message || "Invalid email or password. Please try again.")
     } finally {
@@ -72,6 +85,8 @@ export default function LoginPage() {
       const idToken = await userCredential.user.getIdToken()
       await sendTokenToBackend(idToken)
       toast({ title: "Login successful", description: "Welcome back!" })
+      console.log("JWT in localStorage:", localStorage.getItem("django_jwt"));
+      window.location.href = "/dashboard"; // Force reload to update context
     } catch (err: any) {
       setError(err?.message || "Google sign-in failed. Please try again.")
     } finally {

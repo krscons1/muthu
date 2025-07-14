@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ClientViewSet, ProjectViewSet, TagViewSet, TimeEntryViewSet,
     RegisterView, SettingsView, ReportsView, CalendarView, FirebaseLoginView,
-    CurrentUserView
+    CurrentUserView, OpenApiRootView
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -17,6 +17,7 @@ router.register(r'tags', TagViewSet, basename='tag')
 router.register(r'time-entries', TimeEntryViewSet, basename='timeentry')
 
 urlpatterns = [
+    path('', OpenApiRootView.as_view(), name='api-root'),
     path('auth/register/', RegisterView.as_view(), name='auth_register'),
     path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

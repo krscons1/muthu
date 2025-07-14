@@ -13,10 +13,14 @@ from datetime import datetime
 from rest_framework_simplejwt.tokens import RefreshToken
 import firebase_admin
 from firebase_admin import auth as firebase_auth
+from django.db.models.functions import TruncDate
+from django.contrib.auth import get_user_model
+from rest_framework.reverse import reverse
+from . import authentication
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -97,7 +101,7 @@ class ReportsView(APIView):
         total_entries = entries.count()
         project_stats = entries.values('project__name').annotate(total=Sum('duration'))
         client_stats = entries.values('client__name').annotate(total=Sum('duration'))
-        daily_stats = entries.extra({'date': "date(start_time)"}).values('date').annotate(total=Sum('duration'))
+        daily_stats = entries.annotate(date=TruncDate('start_time')).values('date').annotate(total=Sum('duration')).order_by('date')
         return Response({
             'total_duration': total_duration,
             'total_entries': total_entries,
@@ -128,7 +132,7 @@ class ReportsView(APIView):
         total_entries = entries.count()
         project_stats = entries.values('project__name').annotate(total=Sum('duration'))
         client_stats = entries.values('client__name').annotate(total=Sum('duration'))
-        daily_stats = entries.extra({'date': "date(start_time)"}).values('date').annotate(total=Sum('duration'))
+        daily_stats = entries.annotate(date=TruncDate('start_time')).values('date').annotate(total=Sum('duration')).order_by('date')
         return Response({
             'total_duration': total_duration,
             'total_entries': total_entries,
@@ -185,27 +189,35 @@ class FirebaseLoginView(APIView):
 
     def post(self, request):
         id_token = request.data.get('id_token')
+        print("[FirebaseLoginView] Received id_token:", id_token)
         if not id_token:
-            return Response({'detail': 'No ID token provided.'}, status=400)
+            print("[FirebaseLoginView] No ID token provided in request.data:", request.data)
+            return Response({'detail': 'No ID token provided.', 'debug': str(request.data)}, status=400)
         try:
+            from firebase_admin import auth as firebase_auth
             decoded_token = firebase_auth.verify_id_token(id_token)
+            print("[FirebaseLoginView] Decoded token:", decoded_token)
             uid = decoded_token['uid']
-            email = decoded_token.get('email')
-            # Get or create user in Django
-            from django.contrib.auth.models import User
-            user, created = User.objects.get_or_create(username=uid, defaults={'email': email or ''})
-            # Optionally update email if changed
+            email = decoded_token.get('email', '')
+            User = get_user_model()
+            user, created = User.objects.get_or_create(username=uid, defaults={'email': email})
             if email and user.email != email:
                 user.email = email
                 user.save()
-            # Create JWT token for Django
             refresh = RefreshToken.for_user(user)
+            print("[FirebaseLoginView] Login success for user:", user.username)
             return Response({
                 'token': str(refresh.access_token),
                 'refresh': str(refresh),
+                'user': {
+                    'username': user.username,
+                    'email': user.email,
+                },
+                'created': created,
             })
         except Exception as e:
-            return Response({'detail': str(e)}, status=400)
+            print("[FirebaseLoginView] Token verification failed:", str(e))
+            return Response({'detail': f'Token verification failed: {str(e)}'}, status=400)
     def get(self, request):
         return Response({'detail': 'GET not supported for login.'}, status=405)
 
@@ -215,3 +227,18 @@ class CurrentUserView(APIView):
     def get(self, request):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+
+class OpenApiRootView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, format=None):
+        return Response({
+            'clients': reverse('client-list', request=request, format=format),
+            'projects': reverse('project-list', request=request, format=format),
+            'tags': reverse('tag-list', request=request, format=format),
+            'time-entries': reverse('timeentry-list', request=request, format=format),
+            'settings': reverse('settings', request=request, format=format),
+            'reports': reverse('reports', request=request, format=format),
+            'calendar': reverse('calendar', request=request, format=format),
+            'user': reverse('current_user', request=request, format=format),
+        })
